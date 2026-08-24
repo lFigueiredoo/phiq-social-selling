@@ -1,0 +1,35 @@
+# Dependências
+node_modules/
+
+# Variáveis de ambiente e segredos
+.env
+.env.local
+.env.production
+.env.*.local
+*.pem
+*.key
+secrets/
+**/service-account*.json
+
+# Build / cache
+dist/
+build/
+.turbo/
+.cache/
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+
+# Sistema operacional / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Nunca ignorar o exemplo de variáveis de ambiente
+!.env.example
