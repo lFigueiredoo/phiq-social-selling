@@ -6,8 +6,10 @@ incluindo o hardening de integridade multitenant do PASSO 02A.1 e o
 hardening final de FKs/segurança/schema-qualification do PASSO 02A.2.
 Será expandido a cada nova migration.
 
-> Status: schema definido e validado **estaticamente**. Ainda **não foi
-> aplicado** a nenhum projeto Supabase real (isso é o PASSO 02B).
+> Status: schema **aplicado e validado em banco real** (PASSO 02B
+> concluído). Ver a seção "Aplicação e validação em banco real" ao final
+> deste documento para o registro completo do que foi executado,
+> incluindo as duas migrations de hardening aplicadas depois da inicial.
 
 ## Diagrama de relacionamento
 
@@ -549,6 +551,130 @@ tivermos um Supabase de desenvolvimento real conectado.
   chamada de função sujeita à checagem de privilégio `EXECUTE` de um
   papel de sessão. Esta é uma premissa que raciocinei estaticamente e
   que precisa de confirmação empírica.
+
+## Aplicação e validação em banco real (PASSO 02B — concluído)
+
+O schema foi **aplicado e validado em banco real**. Esta seção registra
+o que efetivamente aconteceu, incluindo as correções que só apareceram
+com a execução real.
+
+### Projeto utilizado
+
+**Base de Dados Phiq.** Nenhum project ref, senha, chave ou token é
+registrado neste documento nem em qualquer arquivo versionado.
+
+### Convivência com tabelas pré-existentes
+
+O banco utilizado já continha tabelas de outro domínio, alheias a este
+projeto:
+
+- `segmentos_clientes`
+- `vendas_itens_raw`
+
+**Nenhuma delas foi alterada.** Todas as migrations do Social Selling
+criam apenas objetos novos, sem tocar em estruturas pré-existentes.
+
+### Migrations aplicadas
+
+| Timestamp remoto | Migration | Conteúdo |
+|---|---|---|
+| `20260825020953` | `initial_social_selling_core_schema` | Schema inicial (5 tabelas, constraints, índices, function, triggers, RLS, grants) — corresponde localmente a `20260824233233_initial_core_schema.sql` |
+| `20260825021058` | `harden_social_selling_service_role_privileges` | Hardening de privilégios do `service_role` |
+| `20260825021149` | `add_social_selling_composite_fk_indexes` | Índices de suporte às FKs compostas |
+
+> Nota: o arquivo local da migration inicial mantém o nome
+> `20260824233233_initial_core_schema.sql` (já commitado e auditado).
+> A diferença de timestamp em relação ao registro remoto é apenas de
+> nomenclatura — o conteúdo aplicado é o mesmo.
+
+### Testes de integridade
+
+Os testes de integridade descritos na seção anterior foram executados
+contra o banco real e **passaram**.
+
+#### Falso negativo no teste de `updated_at` (registro importante)
+
+A primeira execução do teste do trigger de `updated_at` deu **falso
+negativo**. A causa não era o trigger, e sim uma característica do
+PostgreSQL: **`now()` é estável dentro de uma mesma transação**. Como o
+`INSERT` e o `UPDATE` do teste rodaram na mesma transação, `now()`
+retornou exatamente o mesmo valor nas duas operações, e o `updated_at`
+"não mudou" — mas o trigger tinha disparado corretamente o tempo todo.
+
+O teste foi então refeito corretamente: com um `updated_at` inicial
+antigo e o `UPDATE` executado sob `service_role`. Nessa segunda
+execução, o trigger **funcionou como esperado**, atualizando
+`updated_at` para o novo instante.
+
+**Lição para testes futuros:** qualquer verificação de timestamp
+baseada em `now()` precisa ocorrer em transações separadas, ou usar um
+valor inicial deliberadamente antigo. Caso contrário o teste mede a
+estabilidade de `now()`, não o comportamento do trigger.
+
+### Hardening de privilégios do `service_role`
+
+Aplicado pela migration `20260825021058`. A abordagem foi revogar tudo
+primeiro (inclusive do `service_role`, que antes não era alvo do
+`REVOKE ALL`) e então conceder explicitamente o mínimo necessário —
+assim os privilégios efetivos não dependem do que o projeto Supabase
+concede por padrão.
+
+| Tabela | Privilégios do `service_role` |
+|---|---|
+| `public.organizations` | `SELECT` `INSERT` `UPDATE` `DELETE` |
+| `public.instagram_accounts` | `SELECT` `INSERT` `UPDATE` `DELETE` |
+| `public.webhook_events` | `SELECT` `INSERT` `UPDATE` `DELETE` |
+| `public.processing_jobs` | `SELECT` `INSERT` `UPDATE` `DELETE` |
+| `public.audit_logs` | `SELECT` `INSERT` **apenas** |
+
+Em nenhuma das cinco tabelas foram concedidos `TRUNCATE`, `REFERENCES`
+ou `TRIGGER`.
+
+### `EXECUTE` revogado de `public.set_updated_at()`
+
+O `EXECUTE` direto sobre a função foi revogado também do
+`service_role` — somando-se a `PUBLIC`, `anon` e `authenticated`, já
+revogados na migration inicial. Nenhum papel possui `EXECUTE` direto
+sobre ela.
+
+**O trigger continua funcionando normalmente**, o que foi confirmado
+empiricamente no reteste descrito acima. Isso valida a premissa que
+até então era apenas raciocínio estático: um trigger é disparado pelo
+motor de execução de DML e não passa pela checagem de privilégio
+`EXECUTE` a que uma chamada direta de função estaria sujeita.
+
+### Índices adicionais para as FKs compostas
+
+Aplicados pela migration `20260825021149`:
+
+- `idx_webhook_events_account_org` sobre
+  `public.webhook_events (instagram_account_id, organization_id)`
+- `idx_processing_jobs_event_org` sobre
+  `public.processing_jobs (webhook_event_id, organization_id)`
+
+O PostgreSQL não cria índices automaticamente para as colunas de origem
+de uma FK. Sem esses índices, as FKs compostas
+`webhook_events_account_org_fk` e `processing_jobs_event_org_fk`
+ficavam sem cobertura do lado referenciante, penalizando a verificação
+das constraints e, principalmente, operações de `DELETE` na tabela
+referenciada — que precisam varrer a tabela filha atrás de linhas
+dependentes. Os índices simples já existentes cobrem apenas uma coluna
+cada e não substituem um índice sobre o par completo.
+
+### Avisos dos advisors do Supabase (pré-existentes, não relacionados)
+
+Os advisors do Supabase apontaram avisos que **não têm relação com o
+Social Selling** e que dizem respeito a objetos pré-existentes do
+banco:
+
+- `public.rls_auto_enable()` — função `SECURITY DEFINER` executável por
+  `anon`/`authenticated`;
+- índices duplicados em `vendas_itens_raw`.
+
+**Nenhum desses objetos foi alterado.** Eles pertencem a outro domínio
+do mesmo banco e estão fora do escopo deste projeto. Ficam apenas
+registrados aqui para rastreabilidade — a decisão sobre eles cabe a
+quem mantém aquele domínio.
 
 ## O que propositalmente NÃO foi criado neste passo
 
