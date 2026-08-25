@@ -471,8 +471,9 @@ priorização de jobs.
 
 ## Testes obrigatórios na aplicação da primeira migration (PASSO 02B)
 
-Nenhum destes testes foi executado ainda — ficam planejados para quando
-tivermos um Supabase de desenvolvimento real conectado.
+Os testes abaixo foram definidos antes da aplicação e posteriormente
+executados no PASSO 02B. O resultado consolidado está registrado na
+seção "Aplicação e validação em banco real".
 
 - **TESTE 01** — Criar organization válida.
 - **TESTE 02** — Criar instagram_account vinculada a essa organization.
