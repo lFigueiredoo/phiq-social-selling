@@ -1,18 +1,21 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { type InfiniteData, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PanelApiError } from "@/lib/api/client";
 import type { PanelListActionsResponse } from "@/lib/api/panelListActions";
 import { approvePanelAction } from "@/lib/api/panelApproveAction";
 
 function removeFromCachedQueue(
-  data: PanelListActionsResponse | undefined,
+  data: InfiniteData<PanelListActionsResponse> | undefined,
   outboundActionId: string,
-): PanelListActionsResponse | undefined {
+): InfiniteData<PanelListActionsResponse> | undefined {
   if (!data) return data;
   return {
     ...data,
-    actions: data.actions.filter((action) => action.outbound_action_id !== outboundActionId),
-    pagination: { ...data.pagination, total: Math.max(0, data.pagination.total - 1) },
+    pages: data.pages.map((page) => ({
+      ...page,
+      actions: page.actions.filter((action) => action.outbound_action_id !== outboundActionId),
+      pagination: { ...page.pagination, total: Math.max(0, page.pagination.total - 1) },
+    })),
   };
 }
 
@@ -28,10 +31,11 @@ export function useApproveAction(organizationId: string | null) {
       if (!approval.already_approved) {
         toast.success("Ação aprovada para envio. Removida da fila de revisão.");
       }
-      queryClient.setQueriesData<PanelListActionsResponse>(
+      queryClient.setQueriesData<InfiniteData<PanelListActionsResponse>>(
         { queryKey: ["panel-actions", organizationId] },
         (data) => removeFromCachedQueue(data, outboundActionId),
       );
+      void queryClient.invalidateQueries({ queryKey: ["panel-actions", organizationId] });
     },
     onError: (error) => {
       if (!(error instanceof PanelApiError)) {

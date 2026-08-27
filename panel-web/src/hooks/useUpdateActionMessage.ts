@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { type InfiniteData, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PanelApiError } from "@/lib/api/client";
 import type { PanelListActionsResponse } from "@/lib/api/panelListActions";
@@ -10,18 +10,21 @@ interface UpdateMessageVariables {
 }
 
 function patchCachedMessage(
-  data: PanelListActionsResponse | undefined,
+  data: InfiniteData<PanelListActionsResponse> | undefined,
   outboundActionId: string,
   messageText: string,
-): PanelListActionsResponse | undefined {
+): InfiniteData<PanelListActionsResponse> | undefined {
   if (!data) return data;
   return {
     ...data,
-    actions: data.actions.map((action) =>
-      action.outbound_action_id === outboundActionId
-        ? { ...action, message_text: messageText }
-        : action,
-    ),
+    pages: data.pages.map((page) => ({
+      ...page,
+      actions: page.actions.map((action) =>
+        action.outbound_action_id === outboundActionId
+          ? { ...action, message_text: messageText }
+          : action,
+      ),
+    })),
   };
 }
 
@@ -35,7 +38,7 @@ export function useUpdateActionMessage(organizationId: string | null) {
     },
     onSuccess: (updated, { outboundActionId }) => {
       toast.success("Mensagem atualizada.");
-      queryClient.setQueriesData<PanelListActionsResponse>(
+      queryClient.setQueriesData<InfiniteData<PanelListActionsResponse>>(
         { queryKey: ["panel-actions", organizationId] },
         (data) => patchCachedMessage(data, outboundActionId, updated.message_text),
       );

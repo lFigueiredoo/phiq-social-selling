@@ -1,22 +1,40 @@
-import { CheckCircle2, Inbox, RefreshCw } from "lucide-react";
+import { CheckCircle2, Inbox, LoaderCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ActionCard } from "@/components/queue/ActionCard";
 import { useActionsQueue } from "@/hooks/useActionsQueue";
-import type { PanelListActionsFilters } from "@/lib/api/types";
+import type { PanelAction, PanelListActionsFilters } from "@/lib/api/types";
 
 interface ActionQueueListProps {
   organizationId: string;
   filters: PanelListActionsFilters;
-  onLoadMore: () => void;
 }
 
-export function ActionQueueList({
-  organizationId,
-  filters,
-  onLoadMore,
-}: ActionQueueListProps) {
-  const { data, isLoading, isError, refetch } = useActionsQueue(organizationId, filters);
+function flattenUniqueActions(pages: { actions: PanelAction[] }[]): PanelAction[] {
+  const seen = new Set<string>();
+  const actions: PanelAction[] = [];
+
+  for (const page of pages) {
+    for (const action of page.actions) {
+      if (seen.has(action.outbound_action_id)) continue;
+      seen.add(action.outbound_action_id);
+      actions.push(action);
+    }
+  }
+
+  return actions;
+}
+
+export function ActionQueueList({ organizationId, filters }: ActionQueueListProps) {
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useActionsQueue(organizationId, filters);
 
   if (isLoading) {
     return (
@@ -54,7 +72,9 @@ export function ActionQueueList({
     );
   }
 
-  const actions = data?.actions ?? [];
+  const pages = data?.pages ?? [];
+  const actions = flattenUniqueActions(pages);
+  const total = pages[0]?.pagination.total ?? actions.length;
 
   if (actions.length === 0) {
     return (
@@ -75,14 +95,15 @@ export function ActionQueueList({
     );
   }
 
-  const hasMore = data ? data.pagination.offset + actions.length < data.pagination.total : false;
-
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3 px-1">
         <p className="text-sm text-muted-foreground">
-          <strong className="font-semibold text-foreground">{data?.pagination.total ?? actions.length}</strong>{" "}
-          {data?.pagination.total === 1 ? "ação pendente" : "ações pendentes"}
+          <strong className="font-semibold text-foreground">{total}</strong>{" "}
+          {total === 1 ? "ação pendente" : "ações pendentes"}
+          {actions.length < total && (
+            <span className="ml-1">· {actions.length} carregadas</span>
+          )}
         </p>
         <span className="text-xs text-muted-foreground">Atualização automática a cada 30s</span>
       </div>
@@ -91,9 +112,21 @@ export function ActionQueueList({
         <ActionCard key={action.outbound_action_id} action={action} organizationId={organizationId} />
       ))}
 
-      {hasMore && (
-        <Button variant="outline" className="self-center" onClick={onLoadMore}>
-          Carregar mais
+      {hasNextPage && (
+        <Button
+          variant="outline"
+          className="self-center"
+          disabled={isFetchingNextPage}
+          onClick={() => void fetchNextPage()}
+        >
+          {isFetchingNextPage ? (
+            <>
+              <LoaderCircle className="size-3.5 animate-spin" />
+              Carregando...
+            </>
+          ) : (
+            "Carregar mais"
+          )}
         </Button>
       )}
     </div>

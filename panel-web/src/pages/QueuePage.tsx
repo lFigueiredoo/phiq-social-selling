@@ -6,23 +6,18 @@ import { ActionQueueList } from "@/components/queue/ActionQueueList";
 import { useOrganization } from "@/context/OrganizationProvider";
 import type { PanelListActionsFilters } from "@/lib/api/types";
 
-const PAGE_SIZE = 25;
-
 export function QueuePage() {
   const { organizationId } = useOrganization();
-  const [filters, setFilters] = useState<PanelListActionsFilters>({
-    limit: PAGE_SIZE,
-    offset: 0,
-  });
+  const [filters, setFilters] = useState<PanelListActionsFilters>({});
 
   if (!organizationId) return null;
 
   function updateFilters(next: PanelListActionsFilters) {
-    setFilters({ ...next, limit: PAGE_SIZE, offset: 0 });
-  }
-
-  function loadMore() {
-    setFilters((prev) => ({ ...prev, offset: (prev.offset ?? 0) + PAGE_SIZE }));
+    setFilters({
+      intent: next.intent,
+      commercial_potential: next.commercial_potential,
+      action_type: next.action_type,
+    });
   }
 
   return (
@@ -50,11 +45,7 @@ export function QueuePage() {
         </section>
 
         <ActionFilters filters={filters} onChange={updateFilters} />
-        <ActionQueueList
-          organizationId={organizationId}
-          filters={filters}
-          onLoadMore={loadMore}
-        />
+        <ActionQueueList organizationId={organizationId} filters={filters} />
       </div>
     </AppShell>
   );
