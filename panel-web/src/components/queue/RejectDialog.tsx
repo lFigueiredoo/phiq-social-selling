@@ -1,3 +1,4 @@
+import { MessageSquareWarning, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,11 +43,14 @@ export function RejectDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
+          <div className="mb-2 flex size-10 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+            <MessageSquareWarning className="size-5" />
+          </div>
           <DialogTitle>Rejeitar esta ação?</DialogTitle>
           <DialogDescription>
-            A resposta não será enviada. Esta decisão não pode ser desfeita.
+            A sugestão sairá da fila de revisão e não seguirá para envio. Esta decisão não pode ser desfeita pelo painel.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-1.5">
@@ -56,10 +60,11 @@ export function RejectDialog({
             value={reason}
             maxLength={MAX_REASON_LENGTH}
             disabled={isSubmitting}
-            placeholder="Por que esta resposta está sendo rejeitada?"
+            className="min-h-24"
+            placeholder="Ex.: resposta fora do tom, contexto insuficiente, abordagem inadequada…"
             onChange={(event) => setReason(event.target.value)}
           />
-          <span className="text-xs text-muted-foreground">
+          <span className="text-right text-xs text-muted-foreground">
             {reason.length}/{MAX_REASON_LENGTH}
           </span>
         </div>
@@ -68,6 +73,7 @@ export function RejectDialog({
             Cancelar
           </Button>
           <Button variant="destructive" disabled={isSubmitting} onClick={handleConfirm}>
+            <X className="size-3.5" />
             {isSubmitting ? "Rejeitando…" : "Confirmar rejeição"}
           </Button>
         </DialogFooter>

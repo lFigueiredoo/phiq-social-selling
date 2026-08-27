@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="email">Email</Label>
         <Input
@@ -30,6 +31,7 @@ export function LoginForm() {
           type="email"
           autoComplete="email"
           required
+          placeholder="voce@empresa.com.br"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
@@ -41,13 +43,19 @@ export function LoginForm() {
           type="password"
           autoComplete="current-password"
           required
+          placeholder="••••••••"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" disabled={isSubmitting}>
+      {error && (
+        <p className="rounded-lg border border-destructive/15 bg-destructive/7 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <Button type="submit" size="lg" className="mt-1 w-full" disabled={isSubmitting}>
         {isSubmitting ? "Entrando…" : "Entrar"}
+        {!isSubmitting && <ArrowRight className="size-4" />}
       </Button>
     </form>
   );
