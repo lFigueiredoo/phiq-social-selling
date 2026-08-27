@@ -33,3 +33,6 @@ npm-debug.log*
 
 # Nunca ignorar o exemplo de variáveis de ambiente
 !.env.example
+
+# Fixtures locais de desenvolvimento
+supabase/seed.local.sql
