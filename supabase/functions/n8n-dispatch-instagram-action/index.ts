@@ -29,6 +29,63 @@ function normalizeVersion(v: string): string {
 const MAX_PUBLIC_REPLY_AUTHOR_LOOKUPS = 20;
 const PUBLIC_REPLY_AUTHOR_CONCURRENCY = 5;
 
+interface VerifiedReplies {
+  replyIds: string[];
+  hasMore: boolean;
+}
+
+function verifyRepliesPayload(value: unknown): VerifiedReplies | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const replies = value as Record<string, unknown>;
+
+  if (!Array.isArray(replies.data)) {
+    return null;
+  }
+
+  const replyIds: string[] = [];
+
+  for (const reply of replies.data) {
+    if (!reply || typeof reply !== "object" || Array.isArray(reply)) {
+      return null;
+    }
+
+    const id = (reply as Record<string, unknown>).id;
+
+    if (typeof id !== "string" || !id.trim()) {
+      return null;
+    }
+
+    replyIds.push(id.trim());
+  }
+
+  if (replies.paging === undefined) {
+    return { replyIds: [...new Set(replyIds)], hasMore: false };
+  }
+
+  if (
+    !replies.paging ||
+    typeof replies.paging !== "object" ||
+    Array.isArray(replies.paging)
+  ) {
+    return null;
+  }
+
+  const paging = replies.paging as Record<string, unknown>;
+
+  if (!Object.hasOwn(paging, "next")) {
+    return { replyIds: [...new Set(replyIds)], hasMore: false };
+  }
+
+  if (typeof paging.next !== "string" || !paging.next.trim()) {
+    return null;
+  }
+
+  return { replyIds: [...new Set(replyIds)], hasMore: true };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return Response.json({ ok: false, error: "method_not_allowed" }, { status: 405 });
 
@@ -209,9 +266,28 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const repliesHaveMore =
-      typeof preflightBody?.replies?.paging?.next === "string" &&
-      preflightBody.replies.paging.next.trim() !== "";
+    const verifiedReplies = verifyRepliesPayload(
+      preflightBody?.replies,
+    );
+
+    if (!verifiedReplies) {
+      await supabase.rpc("mark_outbound_action_dispatch_error", {
+        p_action_id: actionId,
+        p_error: "public_reply_preflight_replies_payload_invalid",
+        p_uncertain: false,
+      });
+
+      return Response.json(
+        {
+          ok: false,
+          error: "public_reply_preflight_failed",
+          reason: "replies_payload_invalid",
+        },
+        { status: 502 },
+      );
+    }
+
+    const { replyIds, hasMore: repliesHaveMore } = verifiedReplies;
 
     /*
      * Não tentamos paginar /replies aqui porque a API apresentou
@@ -234,22 +310,6 @@ Deno.serve(async (req: Request) => {
         { status: 502 },
       );
     }
-
-    const replyRows = Array.isArray(preflightBody?.replies?.data)
-      ? preflightBody.replies.data
-      : [];
-
-    const replyIds = [
-      ...new Set(
-        replyRows
-          .map((reply: any) =>
-            typeof reply?.id === "string"
-              ? reply.id.trim()
-              : ""
-          )
-          .filter((replyId: string) => replyId !== ""),
-      ),
-    ];
 
     if (replyIds.length > MAX_PUBLIC_REPLY_AUTHOR_LOOKUPS) {
       await supabase.rpc("mark_outbound_action_dispatch_error", {

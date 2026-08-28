@@ -105,15 +105,19 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const hasMembership =
+    const membership =
       Array.isArray(memberships) &&
-      memberships.some(
+      memberships.find(
         (membership: Record<string, unknown>) =>
           membership.organization_id === organizationId,
       );
 
-    if (!hasMembership) {
+    if (!membership) {
       throw new HttpError(403, "forbidden");
+    }
+
+    if (membership.role !== "admin") {
+      throw new HttpError(403, "admin_required");
     }
 
     /*

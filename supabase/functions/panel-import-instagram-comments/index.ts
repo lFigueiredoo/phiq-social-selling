@@ -31,6 +31,63 @@ import {
 const MAX_LIMIT = 25;
 const MAX_REPLY_AUTHOR_LOOKUPS = 100;
 
+interface VerifiedReplies {
+  replyIds: string[];
+  hasMore: boolean;
+}
+
+function verifyRepliesPayload(value: unknown): VerifiedReplies | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const replies = value as Record<string, unknown>;
+
+  if (!Array.isArray(replies.data)) {
+    return null;
+  }
+
+  const replyIds: string[] = [];
+
+  for (const reply of replies.data) {
+    if (!reply || typeof reply !== "object" || Array.isArray(reply)) {
+      return null;
+    }
+
+    const id = (reply as Record<string, unknown>).id;
+
+    if (typeof id !== "string" || !id.trim()) {
+      return null;
+    }
+
+    replyIds.push(id.trim());
+  }
+
+  if (replies.paging === undefined) {
+    return { replyIds, hasMore: false };
+  }
+
+  if (
+    !replies.paging ||
+    typeof replies.paging !== "object" ||
+    Array.isArray(replies.paging)
+  ) {
+    return null;
+  }
+
+  const paging = replies.paging as Record<string, unknown>;
+
+  if (!Object.hasOwn(paging, "next")) {
+    return { replyIds, hasMore: false };
+  }
+
+  if (typeof paging.next !== "string" || !paging.next.trim()) {
+    return null;
+  }
+
+  return { replyIds, hasMore: true };
+}
+
 function normalizeVersion(value: string): string {
   const version = value.trim();
   return /^v\d+\.\d+$/.test(version) ? version : "v26.0";
@@ -525,22 +582,14 @@ Deno.serve(async (req: Request) => {
        * Nesse caso não conseguimos provar que todas foram verificadas e
        * portanto falhamos fechado para este comentário.
        */
-      const repliesData =
-        Array.isArray(comment?.replies?.data)
-          ? comment.replies.data
-          : [];
+      const verifiedReplies = verifyRepliesPayload(comment?.replies);
 
-      const replyIds = repliesData
-        .map((reply: any) =>
-          reply?.id != null
-            ? String(reply.id).trim()
-            : ""
-        )
-        .filter((replyId: string) => replyId !== "");
+      if (!verifiedReplies) {
+        skippedReplyUnverified++;
+        continue;
+      }
 
-      const repliesHaveMore =
-        typeof comment?.replies?.paging?.next === "string" &&
-        comment.replies.paging.next.trim() !== "";
+      const { replyIds, hasMore: repliesHaveMore } = verifiedReplies;
 
       if (repliesHaveMore) {
         skippedReplyUnverified++;
