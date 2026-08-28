@@ -1,8 +1,9 @@
-import { useEffect, type ReactNode } from "react";
+﻿import { useEffect, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { useAuth } from "@/context/AuthProvider";
 import { useOrganization } from "@/context/OrganizationProvider";
 import { useMemberships } from "@/hooks/useMemberships";
+import { HistoricalCommentsPage } from "@/pages/HistoricalCommentsPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { NoAccessPage } from "@/pages/NoAccessPage";
 import { QueuePage } from "@/pages/QueuePage";
@@ -22,9 +23,14 @@ function Protected({ children }: { children: ReactNode }) {
   const { data, isLoading: membershipsLoading, isError } = useMemberships();
 
   const memberships = data?.memberships ?? [];
-  const validSelection = memberships.some((m) => m.organization_id === organizationId);
-  const shouldAutoSelect = memberships.length === 1 && !validSelection;
-  const soleOrganizationId = shouldAutoSelect ? memberships[0].organization_id : null;
+  const validSelection = memberships.some(
+    (m) => m.organization_id === organizationId,
+  );
+  const shouldAutoSelect =
+    memberships.length === 1 && !validSelection;
+  const soleOrganizationId = shouldAutoSelect
+    ? memberships[0].organization_id
+    : null;
 
   useEffect(() => {
     if (soleOrganizationId) {
@@ -36,9 +42,30 @@ function Protected({ children }: { children: ReactNode }) {
   if (!session) return <Navigate to="/login" replace />;
   if (membershipsLoading) return <FullScreenLoading />;
   if (isError) return <FullScreenLoading />;
-  if (memberships.length === 0) return <Navigate to="/sem-acesso" replace />;
+  if (memberships.length === 0) {
+    return <Navigate to="/sem-acesso" replace />;
+  }
   if (shouldAutoSelect) return <FullScreenLoading />;
-  if (!validSelection) return <Navigate to="/selecionar-organizacao" replace />;
+  if (!validSelection) {
+    return <Navigate to="/selecionar-organizacao" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function AdminOnly({ children }: { children: ReactNode }) {
+  const { organizationId } = useOrganization();
+  const { data, isLoading } = useMemberships();
+
+  if (isLoading) return <FullScreenLoading />;
+
+  const membership = data?.memberships.find(
+    (item) => item.organization_id === organizationId,
+  );
+
+  if (!membership || membership.role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
 
   return <>{children}</>;
 }
@@ -48,12 +75,25 @@ export function AppRouter() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/sem-acesso" element={<NoAccessPage />} />
-      <Route path="/selecionar-organizacao" element={<SelectOrganizationPage />} />
+      <Route
+        path="/selecionar-organizacao"
+        element={<SelectOrganizationPage />}
+      />
       <Route
         path="/"
         element={
           <Protected>
             <QueuePage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/historico"
+        element={
+          <Protected>
+            <AdminOnly>
+              <HistoricalCommentsPage />
+            </AdminOnly>
           </Protected>
         }
       />

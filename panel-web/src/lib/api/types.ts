@@ -1,4 +1,4 @@
-export type PanelRole = "reviewer" | "admin";
+﻿export type PanelRole = "reviewer" | "admin";
 
 export interface PanelMembership {
   organization_id: string;
@@ -87,4 +87,38 @@ export interface PanelUpdatedAction {
   status: string;
   message_text: string;
   previous_message_text: string;
+}
+
+export interface PanelInstagramMedia {
+  id: string;
+  caption: string | null;
+  media_type: string | null;
+  media_product_type: string | null;
+  permalink: string | null;
+  timestamp: string | null;
+  comments_count: number | null;
+  is_comment_enabled: boolean | null;
+}
+
+export interface PanelInstagramMediaPagination {
+  limit: number;
+  after: string | null;
+  has_more: boolean;
+}
+
+export interface PanelHistoricalImportSummary {
+  fetched: number;
+  imported: number;
+  already_exists: number;
+  skipped_own: number;
+  skipped_empty: number;
+  skipped_invalid: number;
+  skipped_already_replied: number;
+  skipped_reply_unverified: number;
+  reply_author_lookups: number;
+}
+
+export interface PanelHistoricalImportPagination {
+  after: string | null;
+  has_more: boolean;
 }
