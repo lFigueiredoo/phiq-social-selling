@@ -26,6 +26,9 @@ function normalizeVersion(v: string): string {
   return /^v\d+\.\d+$/.test(trimmed) ? trimmed : "v26.0";
 }
 
+const MAX_PUBLIC_REPLY_AUTHOR_LOOKUPS = 20;
+const PUBLIC_REPLY_AUTHOR_CONCURRENCY = 5;
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return Response.json({ ok: false, error: "method_not_allowed" }, { status: 405 });
 
@@ -86,6 +89,397 @@ Deno.serve(async (req: Request) => {
       p_uncertain: false,
     });
     return Response.json({ ok: false, error: "instagram_account_missing" }, { status: 500 });
+  }
+
+  /*
+   * Última trava antes de uma resposta pública.
+   *
+   * O importador histórico já evita criar ações para comentários que a conta
+   * respondeu anteriormente. Esta checagem cobre a janela entre importação,
+   * aprovação humana e dispatch.
+   *
+   * A API não expõe o autor das replies de forma confiável na expansão
+   * aninhada. Portanto:
+   *
+   * 1. lê os IDs das replies do comentário;
+   * 2. lê cada reply individualmente com fields=id,from;
+   * 3. compara from.id com instagram_account.external_id;
+   * 4. cancela a ação se encontrar uma reply da própria conta;
+   * 5. falha fechado se não puder verificar todas as replies.
+   */
+  if (action.action_type === "public_reply") {
+    const preflightParams = new URLSearchParams({
+      fields: "id,replies.limit(50){id}",
+    });
+
+    const preflightUrl =
+      `https://graph.instagram.com/${apiVersion}/` +
+      `${encodeURIComponent(action.target_comment_id)}?` +
+      preflightParams.toString();
+
+    let preflightResponse: Response;
+
+    try {
+      preflightResponse = await fetch(preflightUrl, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch (err) {
+      await supabase.rpc("mark_outbound_action_dispatch_error", {
+        p_action_id: actionId,
+        p_error:
+          `public_reply_preflight_network_or_timeout:` +
+          `${err instanceof Error ? err.name : "unknown"}`,
+        p_uncertain: false,
+      });
+
+      return Response.json(
+        {
+          ok: false,
+          error: "public_reply_preflight_failed",
+          reason: "network_or_timeout",
+        },
+        { status: 502 },
+      );
+    }
+
+    const preflightRaw = await preflightResponse.text();
+
+    let preflightBody: any = null;
+    try {
+      preflightBody = preflightRaw
+        ? JSON.parse(preflightRaw)
+        : null;
+    } catch {
+      preflightBody = {
+        raw: preflightRaw.slice(0, 500),
+      };
+    }
+
+    if (!preflightResponse.ok) {
+      const providerMessage =
+        typeof preflightBody?.error?.message === "string"
+          ? preflightBody.error.message
+          : `http_${preflightResponse.status}`;
+
+      const providerCode =
+        preflightBody?.error?.code ?? null;
+
+      await supabase.rpc("mark_outbound_action_dispatch_error", {
+        p_action_id: actionId,
+        p_error:
+          `public_reply_preflight_meta_rejected:` +
+          `${providerCode ?? "unknown"}:` +
+          `${providerMessage}`,
+        p_uncertain: false,
+      });
+
+      return Response.json(
+        {
+          ok: false,
+          error: "public_reply_preflight_failed",
+          reason: "meta_rejected",
+          provider_status: preflightResponse.status,
+          provider_code: providerCode,
+        },
+        { status: 502 },
+      );
+    }
+
+    if (
+      String(preflightBody?.id ?? "") !==
+      String(action.target_comment_id)
+    ) {
+      await supabase.rpc("mark_outbound_action_dispatch_error", {
+        p_action_id: actionId,
+        p_error: "public_reply_preflight_comment_identity_mismatch",
+        p_uncertain: false,
+      });
+
+      return Response.json(
+        {
+          ok: false,
+          error: "public_reply_preflight_failed",
+          reason: "comment_identity_mismatch",
+        },
+        { status: 502 },
+      );
+    }
+
+    const repliesHaveMore =
+      typeof preflightBody?.replies?.paging?.next === "string" &&
+      preflightBody.replies.paging.next.trim() !== "";
+
+    /*
+     * Não tentamos paginar /replies aqui porque a API apresentou
+     * comportamento de cursor não confiável nesse endpoint durante os testes.
+     * Se há mais replies que as 50 expandidas, não enviamos.
+     */
+    if (repliesHaveMore) {
+      await supabase.rpc("mark_outbound_action_dispatch_error", {
+        p_action_id: actionId,
+        p_error: "public_reply_preflight_replies_truncated",
+        p_uncertain: false,
+      });
+
+      return Response.json(
+        {
+          ok: false,
+          error: "public_reply_preflight_failed",
+          reason: "replies_truncated",
+        },
+        { status: 502 },
+      );
+    }
+
+    const replyRows = Array.isArray(preflightBody?.replies?.data)
+      ? preflightBody.replies.data
+      : [];
+
+    const replyIds = [
+      ...new Set(
+        replyRows
+          .map((reply: any) =>
+            typeof reply?.id === "string"
+              ? reply.id.trim()
+              : ""
+          )
+          .filter((replyId: string) => replyId !== ""),
+      ),
+    ];
+
+    if (replyIds.length > MAX_PUBLIC_REPLY_AUTHOR_LOOKUPS) {
+      await supabase.rpc("mark_outbound_action_dispatch_error", {
+        p_action_id: actionId,
+        p_error: "public_reply_preflight_reply_lookup_limit_exceeded",
+        p_uncertain: false,
+      });
+
+      return Response.json(
+        {
+          ok: false,
+          error: "public_reply_preflight_failed",
+          reason: "reply_lookup_limit_exceeded",
+        },
+        { status: 502 },
+      );
+    }
+
+    let ownReplyFound = false;
+    let replyAuthorLookups = 0;
+
+    for (
+      let offset = 0;
+      offset < replyIds.length;
+      offset += PUBLIC_REPLY_AUTHOR_CONCURRENCY
+    ) {
+      const batch = replyIds.slice(
+        offset,
+        offset + PUBLIC_REPLY_AUTHOR_CONCURRENCY,
+      );
+
+      const batchResults = await Promise.all(
+        batch.map(async (replyId: string) => {
+          replyAuthorLookups++;
+
+          const replyParams = new URLSearchParams({
+            fields: "id,from",
+          });
+
+          const replyUrl =
+            `https://graph.instagram.com/${apiVersion}/` +
+            `${encodeURIComponent(replyId)}?` +
+            replyParams.toString();
+
+          let replyResponse: Response;
+
+          try {
+            replyResponse = await fetch(replyUrl, {
+              method: "GET",
+              headers: {
+                "Authorization": `Bearer ${accessToken}`,
+              },
+              signal: AbortSignal.timeout(10000),
+            });
+          } catch (err) {
+            return {
+              verified: false,
+              own: false,
+              reason:
+                `network_or_timeout:` +
+                `${err instanceof Error ? err.name : "unknown"}`,
+            };
+          }
+
+          const replyRaw = await replyResponse.text();
+
+          let replyBody: any = null;
+          try {
+            replyBody = replyRaw
+              ? JSON.parse(replyRaw)
+              : null;
+          } catch {
+            replyBody = null;
+          }
+
+          if (!replyResponse.ok) {
+            const providerCode =
+              replyBody?.error?.code ?? "unknown";
+
+            return {
+              verified: false,
+              own: false,
+              reason:
+                `meta_rejected:` +
+                `${replyResponse.status}:` +
+                `${providerCode}`,
+            };
+          }
+
+          const returnedReplyId =
+            typeof replyBody?.id === "string"
+              ? replyBody.id
+              : "";
+
+          if (returnedReplyId !== replyId) {
+            return {
+              verified: false,
+              own: false,
+              reason: "reply_identity_mismatch",
+            };
+          }
+
+          const replyFromId =
+            replyBody?.from?.id != null
+              ? String(replyBody.from.id)
+              : "";
+
+          /*
+           * Ausência de from.id não é interpretada como "terceiro".
+           * Sem identidade verificável, falhamos fechado.
+           */
+          if (!replyFromId) {
+            return {
+              verified: false,
+              own: false,
+              reason: "reply_author_missing",
+            };
+          }
+
+          return {
+            verified: true,
+            own: replyFromId === String(igUserId),
+            reason: "",
+          };
+        }),
+      );
+
+      const unverified = batchResults.find(
+        (result) => !result.verified,
+      );
+
+      if (unverified) {
+        await supabase.rpc("mark_outbound_action_dispatch_error", {
+          p_action_id: actionId,
+          p_error:
+            `public_reply_preflight_reply_author_unverified:` +
+            `${unverified.reason}`,
+          p_uncertain: false,
+        });
+
+        return Response.json(
+          {
+            ok: false,
+            error: "public_reply_preflight_failed",
+            reason: "reply_author_unverified",
+            reply_author_lookups: replyAuthorLookups,
+          },
+          { status: 502 },
+        );
+      }
+
+      if (batchResults.some((result) => result.own)) {
+        ownReplyFound = true;
+        break;
+      }
+    }
+
+    if (ownReplyFound) {
+      const {
+        data: cancelData,
+        error: cancelError,
+      } = await supabase.rpc(
+        "cancel_outbound_public_reply_already_replied",
+        {
+          p_action_id: actionId,
+          p_dispatcher: dispatcherId,
+        },
+      );
+
+      if (
+        cancelError ||
+        !Array.isArray(cancelData) ||
+        cancelData.length === 0
+      ) {
+        console.error(
+          "cancel_outbound_public_reply_already_replied failed",
+          cancelError?.code ?? "empty_result",
+        );
+
+        /*
+         * Não fazemos POST se a transição de cancelamento não puder
+         * ser confirmada.
+         */
+        await supabase.rpc("mark_outbound_action_dispatch_error", {
+          p_action_id: actionId,
+          p_error: "public_reply_preflight_cancel_failed",
+          p_uncertain: false,
+        });
+
+        return Response.json(
+          {
+            ok: false,
+            error: "public_reply_preflight_cancel_failed",
+          },
+          { status: 500 },
+        );
+      }
+
+      const cancelledState = cancelData[0];
+
+      if (cancelledState.status !== "cancelled") {
+        await supabase.rpc("mark_outbound_action_dispatch_error", {
+          p_action_id: actionId,
+          p_error: "public_reply_preflight_cancel_state_invalid",
+          p_uncertain: false,
+        });
+
+        return Response.json(
+          {
+            ok: false,
+            error: "public_reply_preflight_cancel_state_invalid",
+            state: cancelledState,
+          },
+          { status: 409 },
+        );
+      }
+
+      return Response.json({
+        ok: true,
+        cancelled: true,
+        reason: "public_reply_already_exists_before_dispatch",
+        reply_author_lookups: replyAuthorLookups,
+        result: {
+          outbound_action_id: actionId,
+          action_type: action.action_type,
+          status: cancelledState.status,
+          last_error: cancelledState.last_error,
+        },
+      });
+    }
   }
 
   let url = "";
