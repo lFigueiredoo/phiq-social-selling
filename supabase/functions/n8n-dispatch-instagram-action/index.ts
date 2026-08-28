@@ -86,6 +86,86 @@ function verifyRepliesPayload(value: unknown): VerifiedReplies | null {
   return { replyIds: [...new Set(replyIds)], hasMore: true };
 }
 
+type RepliesLookupResult =
+  | { ok: true; replies: VerifiedReplies }
+  | { ok: false; reason: "lookup_failed" | "payload_invalid" };
+
+async function fetchVerifiedReplies(
+  commentId: string,
+  apiVersion: string,
+  accessToken: string,
+): Promise<RepliesLookupResult> {
+  const params = new URLSearchParams({
+    fields: "id",
+    limit: "50",
+  });
+  const endpoint =
+    `https://graph.instagram.com/${apiVersion}/` +
+    `${encodeURIComponent(commentId)}/replies?` +
+    params.toString();
+
+  let response: Response;
+
+  try {
+    response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (err) {
+    console.error(
+      "Meta public reply preflight replies lookup failed",
+      err instanceof Error ? err.name : "unknown",
+    );
+    return { ok: false, reason: "lookup_failed" };
+  }
+
+  let raw = "";
+
+  try {
+    raw = await response.text();
+  } catch (err) {
+    console.error(
+      "Meta public reply preflight replies lookup body read failed",
+      err instanceof Error ? err.name : "unknown",
+    );
+    return { ok: false, reason: "lookup_failed" };
+  }
+
+  let body: unknown = null;
+
+  try {
+    body = raw ? JSON.parse(raw) : null;
+  } catch {
+    // Invalid JSON is treated as unverifiable below.
+  }
+
+  if (!response.ok) {
+    const providerCode =
+      body && typeof body === "object"
+        ? (body as { error?: { code?: unknown } }).error?.code ?? "unknown"
+        : "unknown";
+
+    console.error(
+      "Meta public reply preflight replies lookup rejected",
+      response.status,
+      providerCode,
+    );
+    return { ok: false, reason: "lookup_failed" };
+  }
+
+  const replies = verifyRepliesPayload(body);
+
+  if (!replies) {
+    console.error("Meta public reply preflight replies payload invalid");
+    return { ok: false, reason: "payload_invalid" };
+  }
+
+  return { ok: true, replies };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return Response.json({ ok: false, error: "method_not_allowed" }, { status: 405 });
 
@@ -266,25 +346,38 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const verifiedReplies = verifyRepliesPayload(
+    let verifiedReplies = verifyRepliesPayload(
       preflightBody?.replies,
     );
 
     if (!verifiedReplies) {
-      await supabase.rpc("mark_outbound_action_dispatch_error", {
-        p_action_id: actionId,
-        p_error: "public_reply_preflight_replies_payload_invalid",
-        p_uncertain: false,
-      });
-
-      return Response.json(
-        {
-          ok: false,
-          error: "public_reply_preflight_failed",
-          reason: "replies_payload_invalid",
-        },
-        { status: 502 },
+      const repliesLookup = await fetchVerifiedReplies(
+        action.target_comment_id,
+        apiVersion,
+        accessToken,
       );
+
+      if (!repliesLookup.ok) {
+        await supabase.rpc("mark_outbound_action_dispatch_error", {
+          p_action_id: actionId,
+          p_error:
+            repliesLookup.reason === "payload_invalid"
+              ? "public_reply_preflight_replies_payload_invalid"
+              : "public_reply_preflight_replies_lookup_failed",
+          p_uncertain: false,
+        });
+
+        return Response.json(
+          {
+            ok: false,
+            error: "public_reply_preflight_failed",
+            reason: repliesLookup.reason,
+          },
+          { status: 502 },
+        );
+      }
+
+      verifiedReplies = repliesLookup.replies;
     }
 
     const { replyIds, hasMore: repliesHaveMore } = verifiedReplies;

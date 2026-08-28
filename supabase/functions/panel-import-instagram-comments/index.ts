@@ -88,6 +88,70 @@ function verifyRepliesPayload(value: unknown): VerifiedReplies | null {
   return { replyIds, hasMore: true };
 }
 
+async function fetchVerifiedReplies(
+  commentId: string,
+  apiVersion: string,
+  accessToken: string,
+): Promise<VerifiedReplies | null> {
+  const params = new URLSearchParams({
+    fields: "id",
+    limit: "50",
+  });
+  const endpoint =
+    `https://graph.instagram.com/${apiVersion}/` +
+    `${encodeURIComponent(commentId)}/replies?` +
+    params.toString();
+
+  let response: Response;
+
+  try {
+    response = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+  } catch (err) {
+    console.error(
+      "Meta replies lookup failed",
+      err instanceof Error ? err.name : "unknown",
+    );
+    return null;
+  }
+
+  let body: unknown = null;
+
+  try {
+    body = await response.json();
+  } catch {
+    // Invalid JSON is treated as unverifiable below.
+  }
+
+  if (!response.ok) {
+    const providerCode =
+      body && typeof body === "object"
+        ? (body as { error?: { code?: unknown } }).error?.code ?? "unknown"
+        : "unknown";
+
+    console.error(
+      "Meta replies lookup rejected",
+      response.status,
+      providerCode,
+    );
+    return null;
+  }
+
+  const verifiedReplies = verifyRepliesPayload(body);
+
+  if (!verifiedReplies) {
+    console.error("Meta replies lookup payload invalid");
+    return null;
+  }
+
+  return verifiedReplies;
+}
+
 function normalizeVersion(value: string): string {
   const version = value.trim();
   return /^v\d+\.\d+$/.test(version) ? version : "v26.0";
@@ -582,11 +646,19 @@ Deno.serve(async (req: Request) => {
        * Nesse caso não conseguimos provar que todas foram verificadas e
        * portanto falhamos fechado para este comentário.
        */
-      const verifiedReplies = verifyRepliesPayload(comment?.replies);
+      let verifiedReplies = verifyRepliesPayload(comment?.replies);
 
       if (!verifiedReplies) {
-        skippedReplyUnverified++;
-        continue;
+        verifiedReplies = await fetchVerifiedReplies(
+          commentId,
+          apiVersion,
+          accessToken,
+        );
+
+        if (!verifiedReplies) {
+          skippedReplyUnverified++;
+          continue;
+        }
       }
 
       const { replyIds, hasMore: repliesHaveMore } = verifiedReplies;
