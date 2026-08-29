@@ -60,7 +60,10 @@ Deno.serve(async (req: Request) => {
     .from("outbound_actions")
     .select("id, organization_id, analysis_id, webhook_event_id, action_type, status, policy_check_status, target_comment_id, target_user_id, target_username, message_text, eligible_until, created_at, approved_at, approved_by, sent_at")
     .eq("status", queue)
-    .eq("policy_check_status", "eligible")
+    .or(
+      "and(action_type.eq.private_reply,policy_check_status.eq.eligible)," +
+        "and(action_type.eq.public_reply,policy_check_status.in.(not_required,eligible))",
+    )
     .is("sent_at", null)
     .or(`eligible_until.is.null,eligible_until.gt.${nowIso}`)
     .order(queue === "approved" ? "approved_at" : "created_at", { ascending: true, nullsFirst: false })
