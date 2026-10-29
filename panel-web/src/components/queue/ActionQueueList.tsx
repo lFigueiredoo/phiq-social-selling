@@ -77,6 +77,8 @@ export function ActionQueueList({ organizationId, filters }: ActionQueueListProp
   const total = pages[0]?.pagination.total ?? actions.length;
 
   if (actions.length === 0) {
+    const isHistorical = filters.source === "historical_backfill";
+
     return (
       <div className="panel-surface flex flex-col items-center gap-4 rounded-2xl px-6 py-16 text-center">
         <div className="relative flex size-14 items-center justify-center rounded-2xl bg-primary/8 text-primary">
@@ -88,7 +90,9 @@ export function ActionQueueList({ organizationId, filters }: ActionQueueListProp
         <div className="max-w-sm">
           <p className="font-heading text-lg font-semibold">Fila revisada por enquanto</p>
           <p className="mt-1.5 text-sm leading-6 text-muted-foreground">
-            Não há ações pendentes com os filtros atuais. Novas sugestões elegíveis aparecem aqui automaticamente.
+            {isHistorical
+              ? "Não há respostas históricas pendentes. Importe comentários na outra aba para analisá-los sem misturar com os comentários novos."
+              : "Não há ações pendentes com os filtros atuais. Novas sugestões elegíveis aparecem aqui automaticamente."}
           </p>
         </div>
       </div>

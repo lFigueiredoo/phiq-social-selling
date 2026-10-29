@@ -34,6 +34,7 @@ const INTENTS = new Set([
 ]);
 const POTENTIALS = new Set(["low", "medium", "high", "unknown"]);
 const ACTION_TYPES = new Set(["public_reply", "private_reply"]);
+const SOURCES = new Set(["realtime", "historical_backfill"]);
 
 function enumParam(
   value: string | null,
@@ -77,6 +78,11 @@ Deno.serve(async (req: Request) => {
       ACTION_TYPES,
       "action_type",
     );
+    const source = enumParam(
+      url.searchParams.get("source"),
+      SOURCES,
+      "source",
+    );
     const limit = intParam(url.searchParams.get("limit"), 25);
     const offset = intParam(url.searchParams.get("offset"), 0);
 
@@ -92,6 +98,7 @@ Deno.serve(async (req: Request) => {
       p_intent: intent,
       p_commercial_potential: potential,
       p_action_type: actionType,
+      p_source: source,
       p_limit: limit,
       p_offset: offset,
     });
@@ -112,6 +119,7 @@ Deno.serve(async (req: Request) => {
       pagination: { limit, offset, total },
       actions: rows.map((r: Record<string, unknown>) => ({
         outbound_action_id: r.outbound_action_id,
+        source: r.source,
         action_type: r.action_type,
         status: r.status,
         policy_check_status: r.policy_check_status,

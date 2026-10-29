@@ -129,6 +129,8 @@ export function ActionCard({ action, organizationId }: ActionCardProps) {
               <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <UserRound className="size-3" />
                 <span>Recebido {formatRelativeTime(action.created_at)}</span>
+                <span aria-hidden="true">·</span>
+                <span>{action.source === "historical_backfill" ? "Histórico" : "Tempo real"}</span>
               </div>
             </div>
           </div>

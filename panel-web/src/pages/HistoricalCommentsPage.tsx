@@ -1,6 +1,7 @@
 ﻿import { History } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { HistoricalMediaList } from "@/components/historical/HistoricalMediaList";
+import { HistoricalTabs } from "@/components/historical/HistoricalTabs";
 import { useOrganization } from "@/context/OrganizationProvider";
 
 export function HistoricalCommentsPage() {
@@ -11,6 +12,8 @@ export function HistoricalCommentsPage() {
   return (
     <AppShell>
       <div className="flex flex-col gap-6">
+        <HistoricalTabs />
+
         <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div className="max-w-2xl">
             <div className="mb-2 flex items-center gap-2 text-primary">
@@ -26,8 +29,8 @@ export function HistoricalCommentsPage() {
 
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
               Selecione publicações próprias da conta conectada e importe
-              comentários antigos para o mesmo pipeline de análise usado
-              pelos eventos em tempo real.
+              comentários antigos para análise. As respostas propostas ficam
+              em uma fila histórica separada dos eventos em tempo real.
             </p>
           </div>
 

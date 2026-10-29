@@ -109,7 +109,7 @@ export function AppShell({ children }: AppShellProps) {
               }
             >
               <Inbox className="size-3.5" />
-              Fila de aprovação
+              Comentários novos
             </NavLink>
 
             {isAdmin && (

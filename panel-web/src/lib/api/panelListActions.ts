@@ -19,6 +19,7 @@ export async function fetchPanelActions(
     method: "GET",
     query: {
       organization_id: organizationId,
+      source: filters.source,
       intent: filters.intent,
       commercial_potential: filters.commercial_potential,
       action_type: filters.action_type,

@@ -1,19 +1,26 @@
-import { Sparkles } from "lucide-react";
+import { History, Sparkles } from "lucide-react";
 import { useState } from "react";
+import { HistoricalTabs } from "@/components/historical/HistoricalTabs";
 import { AppShell } from "@/components/layout/AppShell";
 import { ActionFilters } from "@/components/queue/ActionFilters";
 import { ActionQueueList } from "@/components/queue/ActionQueueList";
 import { useOrganization } from "@/context/OrganizationProvider";
-import type { PanelListActionsFilters } from "@/lib/api/types";
+import type { ActionSource, PanelListActionsFilters } from "@/lib/api/types";
 
-export function QueuePage() {
+interface ApprovalQueuePageProps {
+  source: ActionSource;
+  historical?: boolean;
+}
+
+function ApprovalQueuePage({ source, historical = false }: ApprovalQueuePageProps) {
   const { organizationId } = useOrganization();
-  const [filters, setFilters] = useState<PanelListActionsFilters>({});
+  const [filters, setFilters] = useState<PanelListActionsFilters>({ source });
 
   if (!organizationId) return null;
 
   function updateFilters(next: PanelListActionsFilters) {
     setFilters({
+      source,
       intent: next.intent,
       commercial_potential: next.commercial_potential,
       action_type: next.action_type,
@@ -23,19 +30,25 @@ export function QueuePage() {
   return (
     <AppShell>
       <div className="flex flex-col gap-6">
+        {historical && <HistoricalTabs />}
+
         <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div className="max-w-2xl">
             <div className="mb-2 flex items-center gap-2 text-primary">
-              <Sparkles className="size-4" />
+              {historical ? <History className="size-4" /> : <Sparkles className="size-4" />}
               <span className="text-xs font-semibold uppercase tracking-[0.14em]">
-                Revisão humana
+                {historical ? "Revisão do acervo" : "Eventos em tempo real"}
               </span>
             </div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-              Fila de respostas do Instagram
+              {historical
+                ? "Respostas para comentários históricos"
+                : "Comentários novos"}
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              Revise a sugestão da IA, ajuste o texto quando necessário e decida o que está pronto para seguir ao dispatcher.
+              {historical
+                ? "Revise separadamente as respostas públicas sugeridas para comentários importados. Comentários históricos não iniciam Direct automático."
+                : "Revise a sugestão da IA, ajuste o texto quando necessário e decida o que está pronto para seguir ao dispatcher."}
             </p>
           </div>
           <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground sm:max-w-xs">
@@ -49,4 +62,12 @@ export function QueuePage() {
       </div>
     </AppShell>
   );
+}
+
+export function QueuePage() {
+  return <ApprovalQueuePage source="realtime" />;
+}
+
+export function HistoricalQueuePage() {
+  return <ApprovalQueuePage source="historical_backfill" historical />;
 }

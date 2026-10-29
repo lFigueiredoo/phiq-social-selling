@@ -8,6 +8,8 @@ export interface PanelMembership {
 
 export type ActionType = "public_reply" | "private_reply";
 
+export type ActionSource = "realtime" | "historical_backfill";
+
 export type Sentiment = "positive" | "neutral" | "negative" | "mixed" | "unknown";
 
 export type Intent =
@@ -36,6 +38,7 @@ export interface PanelActionAnalysis {
 // (ineligible/not_checked/other statuses are filtered out server-side).
 export interface PanelAction {
   outbound_action_id: string;
+  source: ActionSource;
   action_type: ActionType;
   status: "proposed";
   policy_check_status: "not_required" | "eligible";
@@ -51,6 +54,7 @@ export interface PanelAction {
 }
 
 export interface PanelListActionsFilters {
+  source?: ActionSource;
   intent?: Intent;
   commercial_potential?: CommercialPotential;
   action_type?: ActionType;

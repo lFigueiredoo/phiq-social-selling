@@ -12,6 +12,8 @@ const NoAccessPage = lazy(() => import("@/pages/NoAccessPage")
   .then((module) => ({ default: module.NoAccessPage })));
 const QueuePage = lazy(() => import("@/pages/QueuePage")
   .then((module) => ({ default: module.QueuePage })));
+const HistoricalQueuePage = lazy(() => import("@/pages/QueuePage")
+  .then((module) => ({ default: module.HistoricalQueuePage })));
 const SelectOrganizationPage = lazy(() => import("@/pages/SelectOrganizationPage")
   .then((module) => ({ default: module.SelectOrganizationPage })));
 const SocialOverviewPage = lazy(() => import("@/pages/SocialSellingPage")
@@ -108,6 +110,16 @@ export function AppRouter() {
           <Protected>
             <AdminOnly>
               <HistoricalCommentsPage />
+            </AdminOnly>
+          </Protected>
+        }
+      />
+      <Route
+        path="/historico/respostas"
+        element={
+          <Protected>
+            <AdminOnly>
+              <HistoricalQueuePage />
             </AdminOnly>
           </Protected>
         }
