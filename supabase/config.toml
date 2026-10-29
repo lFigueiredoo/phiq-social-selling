@@ -441,6 +441,12 @@ verify_jwt = false
 [functions.n8n-save-instagram-analysis]
 verify_jwt = false
 
+[functions.n8n-prepare-instagram-draft]
+verify_jwt = false
+
+[functions.n8n-save-instagram-draft]
+verify_jwt = false
+
 [functions.n8n-update-instagram-job]
 verify_jwt = false
 

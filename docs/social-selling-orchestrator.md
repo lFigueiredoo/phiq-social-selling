@@ -1,6 +1,6 @@
 # Orquestrador central do Social Selling (F22F)
 
-`process-social-engagement` é a porta interna para processar uma interação social. O endpoint exige `x-worker-secret` igual a `N8N_WORKER_SECRET`; a chave `service_role` permanece apenas na Edge Function. O banco expõe as RPCs somente ao `service_role`. O frontend, coletor e n8n não implementam transições comerciais. Nenhuma fase cria `outbound_actions`, chama dispatcher ou executa `recommended_next_action`.
+`process-social-engagement` é a porta interna para processar uma interação social. O endpoint exige `x-worker-secret` igual a `N8N_WORKER_SECRET`; a chave `service_role` permanece apenas na Edge Function. O banco expõe as RPCs somente ao `service_role`. O frontend, coletor e n8n não implementam transições comerciais. As fases A–C não criam `outbound_actions`, não chamam dispatcher e não executam `recommended_next_action`. Depois da fase C, um estágio separado e auditável pode criar somente um rascunho `proposed` para aprovação humana.
 
 ## Entrada e saída
 
@@ -73,11 +73,19 @@ Quando recebe `classification_required`, o workflow usa
 `Google Gemini(PaLM) Api account`. A saída volta a `process-social-engagement`,
 onde schema, evidência, confiança e score são validados antes da fase C.
 
+Para comentários classificados, `n8n-prepare-instagram-draft` monta o prompt
+`SOCIAL_REPLY_DRAFT_V1` no backend. O mesmo modelo gera um JSON estrito com o
+texto, sentimento e resumo. `n8n-save-instagram-draft` revalida a saída e chama
+`save_instagram_response_draft`, que fixa o canal como resposta pública e grava
+uma única ação `proposed`. Comentários históricos preservam a origem
+`historical_backfill` e nunca geram Direct nesse fluxo. Falha no rascunho falha
+o job com backoff; reexecução é idempotente e não duplica a ação.
+
 O JSON contém apenas as URLs públicas das Edge Functions e referências por
 nome/ID às credenciais `PHIQ Supabase Worker` e Gemini; ele não contém chave ou
 segredo. O cabeçalho `x-worker-secret` fica criptografado no credential store.
 Dados de execução automática não são persistidos no n8n, reduzindo exposição
-de texto social. O workflow é importado inativo e só pode ser publicado após as
+de texto social. A publicação de uma nova versão do workflow só ocorre após as
 migrations, funções, secrets e testes negativos/positivos estarem concluídos.
 
 Observabilidade usa IDs, origem, códigos e duração; não registra texto completo, segredos ou payload do webhook. A suíte local `social_engagement_orchestrator.sql` roda com `ROLLBACK`; `social_orchestrator_concurrency.cjs` remove seu fixture depois de duas conexões simultâneas. `social_orchestrator_http_local.cjs` executa o handler com o cliente Supabase real contra a API e o PostgreSQL locais, usando somente classificação determinística, e remove seu fixture. O serviço Edge local permanece independente desse teste.

@@ -13,7 +13,10 @@ test('versioned n8n worker is importable, secret-free and fail-safe', () => {
   assert.deepEqual([...names], [
     'Poll queue', 'Claim next job', 'Gate claimed job', 'Process engagement',
     'Decode pipeline response', 'Gemini required?', 'Classify with connected Gemini',
-    'Prepare Gemini completion', 'Complete with Gemini', 'Normalize outcome', 'Finalize job',
+    'Prepare Gemini completion', 'Complete with Gemini', 'Normalize outcome',
+    'Draft eligible?', 'Prepare response draft', 'Decode draft request', 'Draft required?',
+    'Draft with connected Gemini', 'Prepare draft completion', 'Save proposed response',
+    'Decode draft persistence', 'Finalize job',
   ]);
   assert.equal(workflow.active, false);
   assert.equal(workflow.settings.saveDataSuccessExecution, 'none');
@@ -23,21 +26,37 @@ test('versioned n8n worker is importable, secret-free and fail-safe', () => {
     .every(node => node.parameters.authentication === "genericCredentialType" &&
       node.parameters.genericAuthType === "httpHeaderAuth" &&
       node.credentials?.httpHeaderAuth?.name === "PHIQ Supabase Worker"), true);
-  const gemini = workflow.nodes.find(node => node.name === 'Classify with connected Gemini');
-  assert.equal(gemini.type, '@n8n/n8n-nodes-langchain.googleGemini');
-  assert.equal(gemini.parameters.modelId.value, 'models/gemini-3-flash-preview');
-  assert.equal(gemini.credentials.googlePalmApi.name, 'Google Gemini(PaLM) Api account');
-  assert.equal(gemini.onError, 'continueRegularOutput');
+  const geminiNodes = workflow.nodes.filter(node =>
+    node.type === '@n8n/n8n-nodes-langchain.googleGemini');
+  assert.equal(geminiNodes.length, 2);
+  assert.equal(geminiNodes.every(node =>
+    node.parameters.modelId.value === 'models/gemini-3-flash-preview' &&
+    node.credentials.googlePalmApi.name === 'Google Gemini(PaLM) Api account' &&
+    node.onError === 'continueRegularOutput'), true);
   assert.equal(workflow.connections['Gemini required?'].main[0][0].node,
     'Classify with connected Gemini');
   assert.equal(workflow.connections['Gemini required?'].main[1][0].node,
     'Normalize outcome');
   assert.equal(workflow.connections['Complete with Gemini'].main[0][0].node,
     'Normalize outcome');
+  assert.equal(workflow.connections['Normalize outcome'].main[0][0].node,
+    'Draft eligible?');
+  assert.equal(workflow.connections['Draft eligible?'].main[0][0].node,
+    'Prepare response draft');
+  assert.equal(workflow.connections['Draft eligible?'].main[1][0].node,
+    'Finalize job');
+  assert.equal(workflow.connections['Draft required?'].main[0][0].node,
+    'Draft with connected Gemini');
+  assert.equal(workflow.connections['Draft required?'].main[1][0].node,
+    'Finalize job');
+  assert.equal(workflow.connections['Decode draft persistence'].main[0][0].node,
+    'Finalize job');
   assert.doesNotMatch(raw, /x-worker-secret/i);
   assert.doesNotMatch(raw, /openai|OPENAI_API_KEY/i);
   assert.match(raw, /n8n-claim-instagram-job/);
   assert.match(raw, /process-social-engagement/);
+  assert.match(raw, /n8n-prepare-instagram-draft/);
+  assert.match(raw, /n8n-save-instagram-draft/);
   assert.match(raw, /n8n-update-instagram-job/);
   assert.match(raw, /dead_letter/);
   assert.match(raw, /retry_after_seconds/);

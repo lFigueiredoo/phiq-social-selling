@@ -13,7 +13,7 @@ reutiliza o Google Gemini já conectado ao n8n pela credencial criptografada
 | Classificação explícita | Regras em `socialClassifier.ts` | Não chama o Gemini quando a evidência atual já resolve a rota |
 | Classificação ambígua | Gemini conectado ao n8n | Recebe somente prompt/contexto limitados; saída JSON volta ao backend para validação |
 | Confiança e score finais | Backend determinístico | Confiança sem evidência fica limitada a `0.84`; score informado pelo modelo é descartado e recalculado |
-| Rascunho de resposta | Fora do fluxo ativo | Só poderá usar Gemini após guia de voz, política, moderação e aprovação humana |
+| Rascunho de resposta pública | Gemini conectado ao n8n | Prompt separado, saída estrita e persistência `proposed`; toda resposta exige aprovação humana |
 | Casos sensíveis, reclamações e baixa confiança | Revisão humana | Nenhum modelo autoriza envio ou altera elegibilidade sozinho |
 | Auditoria do classificador | Avaliação versionada e anonimizada | Executada antes de trocar modelo, prompt, schema ou limiar |
 
@@ -37,6 +37,20 @@ Campos extras, valores fora das enumerações, score fora de `0..100`, confianç
 fora de `0..1` ou JSON inválido geram retry controlado. O modelo nunca recebe
 segredo, token, service-role key ou permissão de outbound.
 
+## Contrato do rascunho de resposta
+
+Depois que a classificação é concluída, o backend pode devolver um segundo
+prompt, `SOCIAL_REPLY_DRAFT_V1`. O contexto é limitado ao comentário, origem e
+classificação já validada. O Gemini devolve exatamente `message_text`,
+`sentiment` e `analysis_summary`; o backend valida o schema, normaliza o texto e
+rejeita links, campos extras e mensagens acima de 500 caracteres.
+
+A versão inicial cria somente `public_reply`, inclusive para comentários
+históricos. Canal, alvo, tenant, idempotência e status não vêm do modelo. A RPC
+atômica grava a ação com `status=proposed` e `policy_check_status=not_required`.
+O job só é concluído depois da persistência, e nenhum componente novo chama a
+API da Meta. Aprovação e dispatcher continuam etapas independentes.
+
 ## Controles obrigatórios
 
 1. Manter conjunto de avaliação anonimizado por vertical, com exemplos
@@ -52,6 +66,7 @@ segredo, token, service-role key ou permissão de outbound.
 
 ## Separação de responsabilidades
 
-O n8n possui a credencial do Gemini e orquestra a chamada. O Supabase monta o
-contrato, valida a saída, recalcula o score, aplica política e persiste o estado.
-O dispatcher de Instagram continua separado e bloqueado durante a homologação.
+O n8n possui a credencial do Gemini e orquestra as chamadas de classificação e
+rascunho. O Supabase monta os dois contratos, valida as saídas, recalcula o
+score, define o canal e persiste o estado. O dispatcher de Instagram continua
+separado e bloqueado durante a homologação.

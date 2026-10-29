@@ -144,3 +144,23 @@ isolamento, mesmo que o MVP 1 opere com apenas uma organização.
 **Consequência:** Consultas e políticas de acesso (RLS) já nascerão
 filtrando por organização, evitando uma migração de dados dolorosa mais
 adiante.
+
+---
+
+## ADR-009 — Rascunhos Gemini exigem aprovação humana
+
+**Status:** Aprovado em 29/10/2026
+
+**Contexto:** O worker já classifica comentários e atualiza o CRM, mas o painel
+precisa receber novas propostas de resposta sem transformar o modelo em canal
+de envio ou misturar histórico com Direct.
+
+**Decisão:** O Gemini gera somente texto estruturado depois da classificação.
+O backend fixa o canal como resposta pública, valida o contrato e persiste a
+ação como `proposed`. Comentários históricos e em tempo real usam filas
+separadas no painel. Toda promoção para `approved` exige ação humana explícita;
+o dispatcher permanece fora desse workflow.
+
+**Consequência:** Erro do modelo não conclui silenciosamente o job, reexecuções
+não duplicam propostas e nenhuma nova função chama a API do Instagram. Private
+Reply e DM permanecem fora deste estágio até uma decisão e homologação próprias.

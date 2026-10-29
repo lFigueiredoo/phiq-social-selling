@@ -135,6 +135,7 @@ test('signed realtime webhook queues once and two workers cannot claim the same 
 
 test('historical import keeps the same identity and atomic insert contract', () => {
   const source = fs.readFileSync(path.join(root, 'supabase/functions/panel-import-instagram-comments/index.ts'), 'utf8');
+  const claim = fs.readFileSync(path.join(root, 'supabase/functions/n8n-claim-instagram-job/index.ts'), 'utf8');
   const rpc = fs.readFileSync(path.join(root, 'supabase/migrations/20260827191000_add_atomic_historical_comment_import.sql'), 'utf8');
   assert.match(source, /source: "historical_backfill"/);
   assert.match(source, /`meta:instagram:comments:`/);
@@ -142,5 +143,7 @@ test('historical import keeps the same identity and atomic insert contract', () 
   assert.match(rpc, /on conflict \(idempotency_key\) do nothing/i);
   assert.match(rpc, /'already_exists'::text/);
   assert.match(rpc, /'pending'/);
+  assert.match(claim, /payload\?\.source === "historical_backfill"/);
+  assert.match(claim, /source,\s*\n\s*occurred_at: occurredAt/);
   assert.doesNotMatch(fs.readFileSync(path.join(root, 'supabase/functions/meta-instagram-webhook/index.ts'), 'utf8'), /historical_backfill|panel_import_historical_instagram_comment/);
 });

@@ -14,7 +14,7 @@ O webhook realtime e a importação histórica continuam entradas independentes.
 
 Importação histórica pode criar contato, engagement e lead. A origem histórica não muda para realtime em reentregas. Classificação e score ficam para uma chamada futura explícita de `route_social_lead`; nenhuma análise antiga é reinterpretada automaticamente nesta migration.
 
-O mecanismo anterior de `decide_instagram_comment_action` ainda pode criar uma ação `proposed` para um comentário histórico. Essa ação não é enviada automaticamente: `claim_outbound_action_for_dispatch` exige `approved`. O CRM novo não cria ações outbound.
+Depois da classificação do CRM, o worker pode solicitar um rascunho Gemini por um estágio separado. `save_instagram_response_draft` cria somente uma resposta pública `proposed`, inclusive para histórico; a origem fica gravada e `claim_outbound_action_for_dispatch` continua exigindo `approved`. O motor de CRM em si não envia nem aprova ações outbound.
 
 ## Funil central
 

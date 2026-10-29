@@ -153,6 +153,12 @@ Deno.serve(async (req: Request) => {
   const mediaProductType = typeof change?.value?.media?.media_product_type === "string"
     ? change.value.media.media_product_type
     : null;
+  const source = payload?.source === "historical_backfill"
+    ? "historical_backfill"
+    : "realtime";
+  const occurredAt = typeof change?.value?.timestamp === "string" && change.value.timestamp.trim()
+    ? change.value.timestamp
+    : event.received_at;
 
   return json({
     ok: true,
@@ -166,8 +172,8 @@ Deno.serve(async (req: Request) => {
       external_engagement_id: commentId,
       webhook_event_id: event.id,
       text: typeof change?.value?.text === "string" ? change.value.text.slice(0, 2000) : "",
-      source: "realtime",
-      occurred_at: event.received_at,
+      source,
+      occurred_at: occurredAt,
       media_external_id: mediaId,
       metadata: mediaProductType ? { media_product_type: mediaProductType } : {},
     },
@@ -186,6 +192,7 @@ Deno.serve(async (req: Request) => {
       instagram_account_id: event.instagram_account_id,
       type: event.event_type,
       received_at: event.received_at,
+      source,
       instagram_user_id: entry?.id != null ? String(entry.id) : null,
       comment_id: commentId,
       comment_text: typeof change?.value?.text === "string" ? change.value.text : null,
