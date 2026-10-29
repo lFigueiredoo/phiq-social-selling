@@ -23,18 +23,16 @@
     },
     {
       "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "method": "POST",
-        "url": "={{ $env.SUPABASE_FUNCTIONS_URL + '/n8n-claim-instagram-job' }}",
+        "url": "https://leahcbnaefuulswrjraq.supabase.co/functions/v1/n8n-claim-instagram-job",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "content-type",
               "value": "application/json"
-            },
-            {
-              "name": "x-worker-secret",
-              "value": "={{ $env.N8N_WORKER_SECRET }}"
             }
           ]
         },
@@ -60,7 +58,13 @@
       "position": [
         -520,
         0
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2FshkIg4Qivy736d",
+          "name": "PHIQ Supabase Worker"
+        }
+      }
     },
     {
       "parameters": {
@@ -77,18 +81,16 @@
     },
     {
       "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "method": "POST",
-        "url": "={{ $env.SUPABASE_FUNCTIONS_URL + '/process-social-engagement' }}",
+        "url": "https://leahcbnaefuulswrjraq.supabase.co/functions/v1/process-social-engagement",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "content-type",
               "value": "application/json"
-            },
-            {
-              "name": "x-worker-secret",
-              "value": "={{ $env.N8N_WORKER_SECRET }}"
             }
           ]
         },
@@ -114,7 +116,13 @@
       "position": [
         -20,
         0
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2FshkIg4Qivy736d",
+          "name": "PHIQ Supabase Worker"
+        }
+      }
     },
     {
       "parameters": {
@@ -131,18 +139,16 @@
     },
     {
       "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "method": "POST",
-        "url": "={{ $env.SUPABASE_FUNCTIONS_URL + '/n8n-update-instagram-job' }}",
+        "url": "https://leahcbnaefuulswrjraq.supabase.co/functions/v1/n8n-update-instagram-job",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "content-type",
               "value": "application/json"
-            },
-            {
-              "name": "x-worker-secret",
-              "value": "={{ $env.N8N_WORKER_SECRET }}"
             }
           ]
         },
@@ -168,7 +174,13 @@
       "position": [
         500,
         0
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2FshkIg4Qivy736d",
+          "name": "PHIQ Supabase Worker"
+        }
+      }
     }
   ],
   "pinData": {},

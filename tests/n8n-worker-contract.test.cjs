@@ -17,8 +17,12 @@ test('versioned n8n worker is importable, secret-free and fail-safe', () => {
   assert.equal(workflow.active, false);
   assert.equal(workflow.settings.saveDataSuccessExecution, 'none');
   assert.equal(workflow.settings.saveDataErrorExecution, 'none');
-  assert.match(raw, /\$env\.N8N_WORKER_SECRET/);
-  assert.match(raw, /\$env\.SUPABASE_FUNCTIONS_URL/);
+  assert.doesNotMatch(raw, /\$env\./);
+  assert.equal(workflow.nodes.filter(node => node.type === "n8n-nodes-base.httpRequest")
+    .every(node => node.parameters.authentication === "genericCredentialType" &&
+      node.parameters.genericAuthType === "httpHeaderAuth" &&
+      node.credentials?.httpHeaderAuth?.name === "PHIQ Supabase Worker"), true);
+  assert.doesNotMatch(raw, /x-worker-secret/i);
   assert.match(raw, /n8n-claim-instagram-job/);
   assert.match(raw, /process-social-engagement/);
   assert.match(raw, /n8n-update-instagram-job/);

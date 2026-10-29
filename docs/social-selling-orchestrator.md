@@ -67,10 +67,11 @@ job como concluído depois de `classified`, `routed`, `no_profile`,
 usam backoff exponencial limitado a 15 minutos. Entrada terminal usa a RPC
 atômica `dead_letter_processing_job`, preservando a causa e liberando o lock.
 
-O JSON não contém URL, chave ou credencial. O contêiner n8n deve receber
-`SUPABASE_FUNCTIONS_URL` e `N8N_WORKER_SECRET` por ambiente. Dados de execução
-automática não são persistidos no n8n, reduzindo exposição de texto social. O
-workflow é importado inativo e só pode ser publicado após as migrations,
-funções, secrets e testes negativos/positivos estarem concluídos.
+O JSON contém apenas as URLs públicas das Edge Functions e a referência por
+nome/ID à credencial `PHIQ Supabase Worker`; ele não contém chave ou segredo. O
+cabeçalho `x-worker-secret` fica criptografado no credential store do n8n.
+Dados de execução automática não são persistidos no n8n, reduzindo exposição
+de texto social. O workflow é importado inativo e só pode ser publicado após as
+migrations, funções, secrets e testes negativos/positivos estarem concluídos.
 
 Observabilidade usa IDs, origem, códigos e duração; não registra texto completo, segredos ou payload do webhook. A suíte local `social_engagement_orchestrator.sql` roda com `ROLLBACK`; `social_orchestrator_concurrency.cjs` remove seu fixture depois de duas conexões simultâneas. `social_orchestrator_http_local.cjs` executa o handler com o cliente Supabase real contra a API e o PostgreSQL locais, usando somente classificação determinística, e remove seu fixture. O serviço Edge local permanece independente desse teste.
