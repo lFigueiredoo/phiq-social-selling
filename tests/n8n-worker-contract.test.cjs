@@ -44,3 +44,21 @@ test('terminal job handling is atomic and restricted to service role', () => {
   assert.match(endpoint, /dead_letter_processing_job/);
   assert.match(endpoint, /\["complete", "fail", "dead_letter"\]/);
 });
+
+test('claim gate accepts serialized JSON returned by n8n full response mode', () => {
+  const workflow = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
+  const gateCode = workflow.nodes.find(node => node.name === 'Gate claimed job').parameters.jsCode;
+  const executeGate = new Function('$input', gateCode);
+
+  assert.deepEqual(executeGate({
+    first: () => ({ json: { statusCode: 200, body: JSON.stringify({ ok: true, job: null }) } }),
+  }), []);
+
+  const job = { id: 'job-1', locked_by: 'worker-1', attempts: 1 };
+  const engagement = { organization_id: 'org-1', engagement_type: 'comment' };
+  assert.deepEqual(executeGate({
+    first: () => ({
+      json: { statusCode: 200, body: JSON.stringify({ ok: true, job, engagement }) },
+    }),
+  }), [{ json: { claim: { ok: true, job, engagement }, engagement } }]);
+});
