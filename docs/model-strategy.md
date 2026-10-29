@@ -1,49 +1,57 @@
 # Estratégia de modelos para Social Selling
 
-Decisão revisada em 28/10/2026. O objetivo é maximizar precisão comercial e
-segurança sem usar um modelo caro em toda interação. Regras determinísticas,
-política de funil e autorização continuam sendo código e banco; modelos apenas
-classificam, redigem rascunhos ou apoiam revisão.
+Decisão revisada em 28/10/2026: o projeto não cria uma integração OpenAI. Ele
+reutiliza o Google Gemini já conectado ao n8n pela credencial criptografada
+`Google Gemini(PaLM) Api account`. O modelo observado no workflow existente é
+`models/gemini-3-flash-preview`.
 
-## Matriz recomendada
+## Matriz operacional
 
-| Ação | Modelo/método | Configuração inicial | Regra operacional |
-|---|---|---|---|
-| Identidade, idempotência, elegibilidade, limites e transições | Código determinístico + PostgreSQL | Sem modelo | Nunca delegar controles a IA |
-| Classificar intenção, potencial e rota em alto volume | `gpt-6-luna` | Responses API, Structured Outputs, `reasoning.effort=none`, `store=false` | Só para casos que as regras não resolveram; confiança sem evidência continua limitada a `0.84` |
-| Moderar texto recebido ou rascunho gerado | `omni-moderation-latest` | Endpoint de moderação | Sinaliza revisão; não encerra lead nem aplica punição sozinho |
-| Redigir rascunho de resposta em português | `gpt-6.1-terra` | `low` inicialmente, saída estruturada | Rascunho sempre passa por política, revisão humana e aprovação; nunca envia diretamente |
-| Segunda análise de caso ambíguo e comercialmente relevante | `gpt-6.1-sol` | `low` ou `medium` | Uso excepcional, acionado por regra mensurável ou por revisor; não substitui evidência |
-| Auditoria periódica de prompt, funis e amostras difíceis | `gpt-6-astra` | Execução offline, lote amostral | Não usar por comentário em produção; usar para análise profunda e melhoria do sistema |
+| Ação | Método | Regra operacional |
+|---|---|---|
+| Identidade, idempotência, elegibilidade, score, limites e transições | Código determinístico + PostgreSQL | Nunca delegar controles comerciais ou autorização ao modelo |
+| Classificação explícita | Regras em `socialClassifier.ts` | Não chama o Gemini quando a evidência atual já resolve a rota |
+| Classificação ambígua | Gemini conectado ao n8n | Recebe somente prompt/contexto limitados; saída JSON volta ao backend para validação |
+| Confiança e score finais | Backend determinístico | Confiança sem evidência fica limitada a `0.84`; score informado pelo modelo é descartado e recalculado |
+| Rascunho de resposta | Fora do fluxo ativo | Só poderá usar Gemini após guia de voz, política, moderação e aprovação humana |
+| Casos sensíveis, reclamações e baixa confiança | Revisão humana | Nenhum modelo autoriza envio ou altera elegibilidade sozinho |
+| Auditoria do classificador | Avaliação versionada e anonimizada | Executada antes de trocar modelo, prompt, schema ou limiar |
 
-A documentação oficial descreve Luna como o modelo mais econômico para tarefas
-focadas e de alto volume, Terra como rápido para escrita natural, Sol como
-equilíbrio entre custo e inteligência e Astra como opção de maior capacidade.
-Structured Outputs é a escolha correta para o contrato JSON do classificador.
-Fontes: [seleção de modelos](https://developers.openai.com/api/docs/guides/model-selection),
-[família GPT-6](https://developers.openai.com/api/docs/guides/latest-model),
-[Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs),
-[preços](https://developers.openai.com/api/docs/pricing) e
-[moderação](https://developers.openai.com/api/docs/guides/moderation).
+## Contrato Gemini
+
+O backend gera `classifier_request` com `system_prompt`, `context_json` e
+`prompt_version`. O n8n apenas chama o Gemini e devolve a classificação ao mesmo
+endpoint. O backend exige exatamente:
+
+- `intent`;
+- `commercial_potential`;
+- `lead_score`;
+- `route_type`;
+- `confidence`;
+- `reason`;
+- `recommended_next_action`;
+- `signals`;
+- `needs_more_signal`.
+
+Campos extras, valores fora das enumerações, score fora de `0..100`, confiança
+fora de `0..1` ou JSON inválido geram retry controlado. O modelo nunca recebe
+segredo, token, service-role key ou permissão de outbound.
 
 ## Controles obrigatórios
 
-1. Manter um conjunto de avaliação versionado e anonimizado por vertical, com
-   exemplos positivos, negativos, ambíguos, adversariais e variações de escrita.
-2. Medir precisão de rota, falso positivo de lead comercial, cobertura, custo,
-   latência p50/p95, taxa de fallback, recusa e erro de schema.
-3. Só permitir auto-rota quando o limiar da organização e a evidência
-   determinística forem satisfeitos. Score alto não torna contato elegível.
-4. Fixar snapshot do modelo após homologação e reexecutar evals antes de trocar
-   alias, prompt, schema ou limiar.
-5. Não enviar payload bruto, token, e-mail, telefone ou dado desnecessário ao
-   provider. Limitar e anonimizar contexto conforme a finalidade e a LGPD.
-6. Aplicar orçamento mensal, rate limit, timeout, backoff e circuit breaker. Uma
-   falha de provider deve gerar retry controlado, nunca uma rota inventada.
+1. Manter conjunto de avaliação anonimizado por vertical, com exemplos
+   positivos, negativos, ambíguos, adversariais e variações de escrita.
+2. Medir precisão de rota, falso positivo comercial, cobertura, latência,
+   custo, taxa de fallback, erro de schema e revisão humana.
+3. Fixar o identificador do modelo homologado. O alias atual contém `preview`;
+   uma troca para versão estável exige avaliação comparativa e mudança explícita.
+4. Aplicar timeout, backoff, circuit breaker e orçamento no n8n. Falha do
+   provider reencaminha o job; nunca inventa rota nem conclui silenciosamente.
+5. Limitar e anonimizar o contexto conforme finalidade e LGPD.
+6. Manter `INSTAGRAM_DISPATCH_DRY_RUN=true` até smoke real e aprovação formal.
 
-## Critérios para habilitar rascunhos
+## Separação de responsabilidades
 
-Rascunhos com Terra só entram no roadmap depois que houver guia de voz por
-marca/vertical, política de temas proibidos, moderação, expiração da janela da
-Meta, testes de idioma e aprovação explícita no painel. O dispatcher continua
-bloqueado por `INSTAGRAM_DISPATCH_DRY_RUN=true` até um smoke test controlado.
+O n8n possui a credencial do Gemini e orquestra a chamada. O Supabase monta o
+contrato, valida a saída, recalcula o score, aplica política e persiste o estado.
+O dispatcher de Instagram continua separado e bloqueado durante a homologação.

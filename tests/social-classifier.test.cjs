@@ -9,7 +9,7 @@ function load(relative, mocks = {}) {
   const source = fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports = {};
-  vm.runInNewContext(js, { exports, require: spec => mocks[spec], AbortSignal, fetch, JSON, console }, { filename: relative });
+  vm.runInNewContext(js, { exports, require: spec => mocks[spec], JSON, console }, { filename: relative });
   return exports;
 }
 
@@ -87,24 +87,16 @@ test('new explicit signal overrides old weak history', async () => {
   assert.equal(result.classifierSource, 'deterministic');
 });
 
-test('OpenAI adapter uses strict JSON schema and can be mocked without network', async () => {
-  const adapter = load('supabase/functions/_shared/openaiSocialClassifier.ts', { './socialClassifier.ts': classifier });
-  let calls = 0;
-  const provider = adapter.createOpenAIClassifier('test-only-key', 'test-only-model', async (url, options) => {
-    calls++;
-    assert.equal(url, 'https://api.openai.com/v1/responses');
-    const body = JSON.parse(options.body);
-    assert.equal(body.model, 'test-only-model');
-    assert.equal(body.store, false);
-    assert.equal(body.text.format.type, 'json_schema');
-    assert.equal(body.text.format.strict, true);
-    assert.equal(body.reasoning.effort, 'none');
-    return { ok: true, async json() { return { status: 'completed', output: [{ content: [{ type: 'output_text', text: '{}' }] }] }; } };
-  }, { reasoningEffort: 'none' });
-  assert.equal(await provider('system', '{}'), '{}');
-  assert.equal(calls, 1);
-  assert.throws(() => adapter.createOpenAIClassifier('key', 'model', fetch,
-    { reasoningEffort: 'turbo' }), /classifier_reasoning_effort_invalid/);
+test('Gemini request is built by the backend with bounded untrusted context', () => {
+  const request = classifier.buildClassifierRequest(ctx('preciso melhorar a operação', 'post Q3', {
+    recentInteractions: [{ text: 'x'.repeat(800), occurredAt: '2026-10-28', type: 'comment', source: 'realtime' }],
+  }));
+  assert.equal(request.prompt_version, classifier.CLASSIFIER_PROMPT_VERSION);
+  assert.match(request.system_prompt, /untrusted data/i);
+  const payload = JSON.parse(request.context_json);
+  assert.equal(payload.current_text, 'preciso melhorar a operação');
+  assert.equal(payload.media_context, 'post Q3');
+  assert.equal(payload.recent_interactions[0].text.length, 500);
 });
 
 test('classifier endpoint fails closed before any database or provider access', async () => {
@@ -119,7 +111,6 @@ test('classifier endpoint fails closed before any database or provider access', 
     require(spec) {
       if (spec.includes('supabase-js')) return { createClient() { dbCalls++; throw Error('unexpected DB'); } };
       if (spec.includes('socialClassifier.ts')) return classifier;
-      if (spec.includes('openaiSocialClassifier.ts')) return {};
       return {};
     },
   });

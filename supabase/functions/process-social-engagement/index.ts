@@ -1,7 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { classifySocialLeadContext, type ClassifierContext, type RecentInteraction } from "../_shared/socialClassifier.ts";
-import { createOpenAIClassifier } from "../_shared/openaiSocialClassifier.ts";
+import {
+  buildClassifierRequest,
+  classifySocialLeadContext,
+  type ClassifierContext,
+  type RecentInteraction,
+} from "../_shared/socialClassifier.ts";
 
 type SnapshotItem = {
   id: string;
@@ -128,15 +132,22 @@ Deno.serve(async (req: Request) => {
     source: (input as Record<string, unknown>).source as ClassifierContext["source"],
     engagementCount: snapshot.length,
   };
-  const apiKey = Deno.env.get("OPENAI_API_KEY") ?? "";
-  const model = Deno.env.get("SOCIAL_CLASSIFIER_MODEL") ?? "";
-  const reasoningEffort = Deno.env.get("SOCIAL_CLASSIFIER_REASONING_EFFORT") ?? undefined;
-  const provider = apiKey && model
-    ? createOpenAIClassifier(apiKey, model, globalThis.fetch, { reasoningEffort })
-    : undefined;
+  const suppliedClassification = body.classification;
+  const provider = suppliedClassification === undefined
+    ? undefined
+    : async () => suppliedClassification;
   let classified;
   try { classified = await classifySocialLeadContext(context, provider, { throwOnProviderFailure: true }); }
   catch (error) {
+    if ((error as { message?: unknown } | null)?.message === "classifier_unavailable" &&
+      suppliedClassification === undefined) {
+      return result({
+        ...prepared,
+        result_code: "classification_required",
+        retryable: false,
+        classifier_request: buildClassifierRequest(context),
+      });
+    }
     const { data, error: markError } = await db.rpc("mark_social_engagement_pipeline_failure", {
       p_organization_id: (input as Record<string, unknown>).organization_id,
       p_lead_id: prepared.lead_id, p_engagement_id: prepared.engagement_id,

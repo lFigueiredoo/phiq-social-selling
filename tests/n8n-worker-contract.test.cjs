@@ -12,7 +12,8 @@ test('versioned n8n worker is importable, secret-free and fail-safe', () => {
   const names = new Set(workflow.nodes.map(node => node.name));
   assert.deepEqual([...names], [
     'Poll queue', 'Claim next job', 'Gate claimed job', 'Process engagement',
-    'Normalize outcome', 'Finalize job',
+    'Decode pipeline response', 'Gemini required?', 'Classify with connected Gemini',
+    'Prepare Gemini completion', 'Complete with Gemini', 'Normalize outcome', 'Finalize job',
   ]);
   assert.equal(workflow.active, false);
   assert.equal(workflow.settings.saveDataSuccessExecution, 'none');
@@ -22,12 +23,25 @@ test('versioned n8n worker is importable, secret-free and fail-safe', () => {
     .every(node => node.parameters.authentication === "genericCredentialType" &&
       node.parameters.genericAuthType === "httpHeaderAuth" &&
       node.credentials?.httpHeaderAuth?.name === "PHIQ Supabase Worker"), true);
+  const gemini = workflow.nodes.find(node => node.name === 'Classify with connected Gemini');
+  assert.equal(gemini.type, '@n8n/n8n-nodes-langchain.googleGemini');
+  assert.equal(gemini.parameters.modelId.value, 'models/gemini-3-flash-preview');
+  assert.equal(gemini.credentials.googlePalmApi.name, 'Google Gemini(PaLM) Api account');
+  assert.equal(gemini.onError, 'continueRegularOutput');
+  assert.equal(workflow.connections['Gemini required?'].main[0][0].node,
+    'Classify with connected Gemini');
+  assert.equal(workflow.connections['Gemini required?'].main[1][0].node,
+    'Normalize outcome');
+  assert.equal(workflow.connections['Complete with Gemini'].main[0][0].node,
+    'Normalize outcome');
   assert.doesNotMatch(raw, /x-worker-secret/i);
+  assert.doesNotMatch(raw, /openai|OPENAI_API_KEY/i);
   assert.match(raw, /n8n-claim-instagram-job/);
   assert.match(raw, /process-social-engagement/);
   assert.match(raw, /n8n-update-instagram-job/);
   assert.match(raw, /dead_letter/);
   assert.match(raw, /retry_after_seconds/);
+  assert.match(raw, /classification_required/);
   assert.doesNotMatch(raw, /(?:sk-|re_)[A-Za-z0-9_-]{20,}/);
   assert.doesNotMatch(raw, /SUPABASE_(?:SERVICE_ROLE|SECRET)_KEY/);
 });

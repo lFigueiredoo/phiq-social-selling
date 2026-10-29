@@ -17,11 +17,11 @@ vm.runInNewContext(compile('supabase/functions/_shared/socialClassifier.ts'),
   { exports: classifier, require() { return {}; }, JSON, console, Error },
   { filename: 'socialClassifier.ts' });
 
-function endpoint(providerError) {
+function endpoint() {
   const calls = [];
   const env = {
     N8N_WORKER_SECRET: 'local-test-secret', SUPABASE_URL: 'http://local',
-    SUPABASE_SERVICE_ROLE_KEY: 'test-key', OPENAI_API_KEY: 'test-ai-key', SOCIAL_CLASSIFIER_MODEL: 'test-model',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-key',
   };
   let handler;
   const prepared = {
@@ -41,6 +41,11 @@ function endpoint(providerError) {
       data: { ...prepared, result_code: 'retryable_error', classification_status: 'failed_retryable',
         error_code: args.p_error_code, retryable: true }, error: null,
     });
+    if (name === 'complete_social_engagement_pipeline') return Promise.resolve({
+      data: { ...prepared, context_snapshot: undefined, result_code: 'classified',
+        classification_status: 'completed', classifier_source: args.p_classifier_source,
+        classification: args.p_classification }, error: null,
+    });
     throw new Error(`unexpected RPC: ${name}`);
   } };
   vm.runInNewContext(compile('supabase/functions/process-social-engagement/index.ts'), {
@@ -49,55 +54,60 @@ function endpoint(providerError) {
     require(spec) {
       if (spec.includes('supabase-js')) return { createClient() { return db; } };
       if (spec.includes('socialClassifier.ts')) return classifier;
-      if (spec.includes('openaiSocialClassifier.ts')) return {
-        createOpenAIClassifier() { return async () => { throw providerError; }; },
-      };
       return {};
     },
   }, { filename: 'process-social-engagement/index.ts' });
-  const request = (secret = 'local-test-secret') => handler(new Request('http://local', {
+  const request = (secret = 'local-test-secret', classification) => handler(new Request('http://local', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-worker-secret': secret },
     body: JSON.stringify({ organization_id: prepared.organization_id,
       instagram_account_id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
       external_user_id: 'test-user', engagement_type: 'comment', source: 'realtime',
-      external_engagement_id: 'test-1', text: 'Preciso de ajuda com a operação da empresa' }),
+      external_engagement_id: 'test-1', text: 'Preciso de ajuda com a operação da empresa',
+      ...(classification === undefined ? {} : { classification }) }),
   }));
   return { request, calls, env };
 }
 
 test('orchestrator rejects unauthenticated calls before touching the database', async () => {
-  const { request, calls } = endpoint(new Error('unreachable'));
+  const { request, calls } = endpoint();
   assert.equal((await request('wrong')).status, 401);
   assert.equal(calls.length, 0);
 });
 
-test('provider failures retain phase A data and return a retryable code', async () => {
-  const failures = [
-    [Object.assign(new Error('timeout'), { name: 'TimeoutError' }), 'classifier_timeout'],
-    [new Error('classifier_rate_limited'), 'classifier_rate_limited'],
-    [new Error('classifier_provider_error'), 'classifier_provider_error'],
-    [new Error('invalid_ai_schema'), 'classifier_invalid_output'],
-  ];
-  for (const [error, code] of failures) {
-    const { request, calls } = endpoint(error);
-    const response = await request();
-    const body = await response.json();
-    assert.equal(response.status, 200);
-    assert.equal(body.result_code, 'retryable_error');
-    assert.equal(body.error_code, code);
-    assert.equal(body.retryable, true);
-    assert.deepEqual(calls.map(item => item.name), [
-      'prepare_social_engagement_pipeline', 'mark_social_engagement_pipeline_failure',
-    ]);
-    assert.equal(calls[1].args.p_error_code, code);
-  }
+test('unresolved context returns a Gemini request without marking a failure', async () => {
+  const { request, calls } = endpoint();
+  const response = await request();
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.result_code, 'classification_required');
+  assert.equal(body.retryable, false);
+  assert.equal(typeof body.classifier_request.system_prompt, 'string');
+  assert.equal(typeof body.classifier_request.context_json, 'string');
+  assert.deepEqual(calls.map(item => item.name), ['prepare_social_engagement_pipeline']);
 });
 
-test('missing classifier model remains retryable without applying a route', async () => {
-  const { request, calls, env } = endpoint(new Error('unreachable'));
-  delete env.SOCIAL_CLASSIFIER_MODEL;
-  const body = await (await request()).json();
+test('invalid Gemini output retains phase A data and returns a retryable code', async () => {
+  const { request, calls } = endpoint();
+  const body = await (await request('local-test-secret', { route_type: 'invalid' })).json();
   assert.equal(body.result_code, 'retryable_error');
-  assert.equal(body.error_code, 'classifier_unavailable');
+  assert.equal(body.error_code, 'classifier_invalid_output');
   assert.equal(calls.at(-1).name, 'mark_social_engagement_pipeline_failure');
+});
+
+test('valid Gemini output is revalidated and completed by the backend', async () => {
+  const { request, calls } = endpoint();
+  const classification = {
+    intent: 'q3_interest', commercial_potential: 'high', lead_score: 90, route_type: 'q3',
+    confidence: 0.93, reason: 'Operational need stated.', recommended_next_action: 'human_review',
+    signals: ['business_operation'], needs_more_signal: false,
+  };
+  const body = await (await request('local-test-secret', classification)).json();
+  assert.equal(body.result_code, 'classified');
+  assert.equal(body.classifier_source, 'ai');
+  assert.equal(body.classification.route_type, 'q3');
+  assert.ok(body.classification.confidence < 0.85);
+  assert.notEqual(body.classification.lead_score, 90);
+  assert.deepEqual(calls.map(item => item.name), [
+    'prepare_social_engagement_pipeline', 'complete_social_engagement_pipeline',
+  ]);
 });

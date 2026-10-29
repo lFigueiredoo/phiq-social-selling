@@ -22,10 +22,10 @@ Supabase Edge Function (Webhook Receiver)
 processing_jobs (fila em Postgres)
    ▼
 n8n (worker)
-   │  consome o job, busca contexto do usuário/lead,
-   │  chama a OpenAI, recebe classificação
+   │  consome o job; casos explícitos ficam no backend,
+   │  casos ambíguos chamam o Gemini já conectado
    ▼
-OpenAI
+Google Gemini (credencial criptografada no n8n)
    │  análise semântica: intenção, sentimento, potencial comercial
    ▼
 Decision Engine (regras em n8n + automation_rules)
@@ -58,7 +58,7 @@ Exige resposta rápida (HTTP 200) e validação de assinatura.
 - criar um `processing_job` correspondente;
 - retornar HTTP 200 o mais rápido possível.
 
-Não faz chamadas à OpenAI, não decide nada e não envia respostas ao
+Não faz chamadas a provider de IA, não decide nada e não envia respostas ao
 Instagram. É deliberadamente "burra" e rápida.
 
 ### processing_jobs (fila)
@@ -67,15 +67,15 @@ processamento pesado (IA, decisão, envio) aconteça de forma assíncrona e
 resiliente, sem bloquear o webhook.
 
 ### n8n (worker de orquestração)
-Consome jobs da fila. Busca contexto do usuário/lead já registrado,
-monta o prompt (a partir do sistema centralizado de prompts, quando
-existir) e chama a OpenAI. Nunca chama a API do Instagram para enviar
-nada — apenas orquestra e produz uma decisão.
+Consome jobs da fila. O backend devolve prompt e contexto limitados somente
+quando as regras não resolvem a classificação. O n8n chama o Gemini com a
+credencial criptografada e devolve o JSON ao backend. Nunca chama a API do
+Instagram para enviar nada neste fluxo.
 
-### OpenAI
-Executa a análise semântica: classificação de intenção, sentimento e
-pontuação de potencial comercial. Não tem acesso direto a nenhuma API
-externa nem permissão de disparar ações.
+### Google Gemini
+Executa somente a classificação semântica ambígua. Não recebe tokens do
+Supabase ou da Meta, não aplica score final, não altera funil e não possui
+permissão de disparar ações.
 
 ### Decision Engine
 Aplica as regras de automação (tabela `automation_rules`, quando
@@ -120,8 +120,8 @@ apenas refletem o que já está no banco.
 ## Status observado em 28/10/2026
 
 O banco, as Edge Functions, o classificador, os funis e o painel estão
-implementados e validados localmente. O Supabase remoto ainda não recebeu as
-seis migrations e três funções mais novas; o worker n8n do novo orquestrador
-também não está versionado. A configuração do App Meta precisa ser revalidada
-no dashboard. O inventário detalhado e o plano de produção estão em
+implementados. O Supabase remoto foi alinhado e o worker está versionado. A
+versão com Gemini conectado ainda precisa de importação, fixture positivo e
+ativação controlada. A configuração do App Meta precisa ser revalidada no
+dashboard. O inventário detalhado e o plano de produção estão em
 [`audit-2026-10-28.md`](audit-2026-10-28.md).

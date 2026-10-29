@@ -28,7 +28,7 @@ A resposta traz `operation_id`, `contact_id`, `engagement_id`, `lead_id`, indica
 ## Fases e limites transacionais
 
 1. **Fase A, uma transação PostgreSQL:** `prepare_social_engagement_pipeline` bloqueia a conta para serializar identidade e entrega duplicada; faz upsert do contato, registra o engagement, usa o lead existente ou cria um, aplica o motor central pelo trigger e devolve um snapshot das últimas interações. Um lead `won`, `lost` ou `cancelled` permanece o mesmo lead.
-2. **Classificação, fora da transação:** a Edge Function usa `classifySocialLeadContext` F22D. O classificador determinístico decide primeiro. Só um contexto não resolvido consulta o provedor configurado. A decisão usa o snapshot da fase A, sem manter conexão ou lock durante a chamada externa.
+2. **Classificação, fora da transação:** a Edge Function usa `classifySocialLeadContext` F22D. O classificador determinístico decide primeiro. Para contexto não resolvido, ela devolve `classification_required`; o n8n chama o Gemini já conectado e reenvia o JSON ao backend. A decisão usa o snapshot da fase A, sem manter conexão ou lock durante a chamada externa.
 3. **Fase C, uma transação PostgreSQL:** `complete_social_engagement_pipeline` bloqueia engagement e lead, chama `save_social_classification` F22D, aplica qualificação, limiares e rota pelo motor central, inicia a vertical em `lead_received` e devolve o estado consolidado. `classification_status=completed` e `pipeline_processed_at` ficam na interação.
 
 O primeiro sinal pode receber classificação persistida e ainda permanecer em `new_lead`. Uma segunda interação substantiva leva a `first_contact`; a avaliação estruturada percorre `qualification` e `routing`. Não há salto automático de etapas. A ação recomendada vem da etapa vertical F22E; ela nunca é executada pelo orquestrador.
@@ -47,6 +47,7 @@ Se o provedor estiver indisponível, expirar, responder 429/500 ou produzir saí
 | `needs_more_signal` | Sinal insuficiente ou curtida isolada |
 | `lead_closed` | Interação registrada em lead encerrado, sem reabertura automática |
 | `already_processed` | Entrega repetida, sem segundo efeito |
+| `classification_required` | Estado intermediário: o n8n deve consultar o Gemini e reenviar a classificação |
 | `retryable_error` | Dados base preservados; worker pode retentar |
 | `terminal_error` | Entrada inválida ou não autorizada |
 
@@ -67,9 +68,14 @@ job como concluído depois de `classified`, `routed`, `no_profile`,
 usam backoff exponencial limitado a 15 minutos. Entrada terminal usa a RPC
 atômica `dead_letter_processing_job`, preservando a causa e liberando o lock.
 
-O JSON contém apenas as URLs públicas das Edge Functions e a referência por
-nome/ID à credencial `PHIQ Supabase Worker`; ele não contém chave ou segredo. O
-cabeçalho `x-worker-secret` fica criptografado no credential store do n8n.
+Quando recebe `classification_required`, o workflow usa
+`models/gemini-3-flash-preview` com a credencial criptografada
+`Google Gemini(PaLM) Api account`. A saída volta a `process-social-engagement`,
+onde schema, evidência, confiança e score são validados antes da fase C.
+
+O JSON contém apenas as URLs públicas das Edge Functions e referências por
+nome/ID às credenciais `PHIQ Supabase Worker` e Gemini; ele não contém chave ou
+segredo. O cabeçalho `x-worker-secret` fica criptografado no credential store.
 Dados de execução automática não são persistidos no n8n, reduzindo exposição
 de texto social. O workflow é importado inativo e só pode ser publicado após as
 migrations, funções, secrets e testes negativos/positivos estarem concluídos.

@@ -52,7 +52,39 @@ and explicit. A generic compliment, emoji or 'quero saber mais' is insufficient.
 must not override a newer explicit request. Do not invent identity, purchase intent or eligibility.
 Confidence measures certainty about the route, not lead quality. Lead score measures commercial
 readiness and is independently recomputed by the service. Provide short factual reason and signals
-grounded in the supplied context. Never generate or recommend sending a message or outbound action.`;
+grounded in the supplied context. Never generate or recommend sending a message or outbound action.
+Return exactly one JSON object, without Markdown, with exactly these keys:
+intent, commercial_potential, lead_score, route_type, confidence, reason,
+recommended_next_action, signals, needs_more_signal.
+Allowed intent: franchise_interest, q3_interest, course_interest, product_interest,
+commercial_interest, support, complaint, engagement, other.
+Allowed commercial_potential: low, medium, high, unknown.
+Allowed route_type: franchise, q3, hotmart, nuy, no_profile.
+Allowed recommended_next_action: human_review, await_new_signal, request_more_context.
+lead_score must be an integer from 0 to 100; confidence a number from 0 to 1;
+reason a non-empty string up to 240 characters; signals an array of at most 12 short strings;
+needs_more_signal a boolean. Do not include any additional key.`;
+
+export function buildClassifierRequest(context: ClassifierContext): {
+  system_prompt: string;
+  context_json: string;
+  prompt_version: string;
+} {
+  return {
+    system_prompt: CLASSIFIER_PROMPT,
+    context_json: JSON.stringify({
+      current_text: context.currentText.slice(0, 2000),
+      media_context: (context.mediaContext ?? "").slice(0, 500),
+      recent_interactions: context.recentInteractions.slice(0, 8).map((item) => ({
+        ...item,
+        text: item.text.slice(0, 500),
+      })),
+      prior_summary: (context.priorSummary ?? "").slice(0, 500),
+      source: context.source,
+    }),
+    prompt_version: CLASSIFIER_PROMPT_VERSION,
+  };
+}
 
 const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
@@ -177,13 +209,8 @@ export async function classifySocialLeadContext(
     return { classification: fallback, classifierSource: "fallback", promptVersion: CLASSIFIER_PROMPT_VERSION };
   }
   try {
-    const raw = await provider(CLASSIFIER_PROMPT, JSON.stringify({
-      current_text: context.currentText.slice(0, 2000),
-      media_context: (context.mediaContext ?? "").slice(0, 500),
-      recent_interactions: context.recentInteractions.slice(0, 8).map((item) => ({ ...item, text: item.text.slice(0, 500) })),
-      prior_summary: (context.priorSummary ?? "").slice(0, 500),
-      source: context.source,
-    }));
+    const request = buildClassifierRequest(context);
+    const raw = await provider(request.system_prompt, request.context_json);
     const parsed = validateAIOutput(raw);
     const currentEvidence = evidence(context);
     let confidence = parsed.route_type !== "no_profile" && currentEvidence.route !== parsed.route_type

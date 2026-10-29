@@ -36,7 +36,7 @@ Variáveis mínimas por fluxo:
 |---|---|
 | Webhook Meta | `META_APP_SECRET`, `META_VERIFY_TOKEN` |
 | Worker/classificação | `N8N_WORKER_SECRET` |
-| OpenAI para casos não determinísticos | `OPENAI_API_KEY`, `SOCIAL_CLASSIFIER_MODEL` |
+| Gemini para casos não determinísticos | credencial criptografada `Google Gemini(PaLM) Api account` no n8n |
 | Política/dispatch Meta | `META_ACCESS_TOKEN`, `META_API_VERSION` |
 | Painel no navegador | `PANEL_ALLOWED_ORIGINS` |
 
@@ -97,14 +97,14 @@ O coletor experimental possui uma suíte isolada:
 - `classify-social-lead`, `process-social-engagement` e `panel-social-crm`
   implantadas, junto aos gateways atualizados do worker;
 - painel CRM publicado e validado no domínio Vercel de produção;
-- `SOCIAL_CLASSIFIER_MODEL=gpt-6-luna` e
-  `SOCIAL_CLASSIFIER_REASONING_EFFORT=none` configurados;
-- `OPENAI_API_KEY` ainda ausente;
-- workflow n8n importado e configurado com a credencial criptografada
-  `PHIQ Supabase Worker`; o smoke de claim sem item na fila foi aprovado e o
-  workflow permanece inativo.
+- Google Gemini já conectado ao n8n com a credencial criptografada
+  `Google Gemini(PaLM) Api account` e modelo
+  `models/gemini-3-flash-preview`;
+- nenhuma chave de provider AI é necessária no Supabase;
+- workflow n8n configurado com `PHIQ Supabase Worker`; o smoke de claim sem
+  item na fila foi aprovado e a versão com Gemini permanece inativa.
 
 O restante da promoção deve preservar `INSTAGRAM_DISPATCH_DRY_RUN=true`, usar
-segredos diferentes por finalidade, cadastrar `OPENAI_API_KEY`, processar um
-fixture controlado sem outbound, publicar o worker e somente depois validar um
-comentário autorizado da Meta.
+segredos diferentes por finalidade, processar um fixture controlado com Gemini
+e sem outbound, publicar o worker e somente depois validar um comentário
+autorizado da Meta.

@@ -13,7 +13,7 @@ O ambiente local está executável e foi validado com:
 - 33 migrations aplicadas do zero em PostgreSQL 17;
 - 19 Edge Functions iniciadas no runtime local;
 - 8 contratos SQL/pgTAP, 2 testes de concorrência e 1 teste HTTP integrado;
-- 25 testes Node de contrato e 48 testes Python do coletor;
+- 26 testes Node de contrato e 48 testes Python do coletor;
 - build TypeScript/Vite, lint e `npm audit` de produção sem falhas;
 - frontend dividido por rota, sem o bundle monolítico anterior.
 
@@ -21,11 +21,12 @@ Em 28/10/2026, o Supabase remoto foi alinhado às 33 migrations e às funções
 versionadas, com backup anterior ao deploy e testes negativos de autenticação.
 O painel CRM foi publicado em
 [`phiq-social-selling-panel.vercel.app`](https://phiq-social-selling-panel.vercel.app/)
-e validado com a conta administrativa. O modelo remoto está fixado em
-`gpt-6-luna`/`none`, mas ainda falta cadastrar `OPENAI_API_KEY`. O worker foi
-importado no n8n com credencial de cabeçalho criptografada e passou o smoke test
-de claim sem outbound. Ele continua inativo até o teste positivo com uma
-classificação controlada e a validação real da Meta. Veja o estado e os bloqueios em
+e validado com a conta administrativa. A classificação não determinística usa o
+Google Gemini já conectado ao n8n pela credencial criptografada
+`Google Gemini(PaLM) Api account`; o Supabase não precisa de chave de provider.
+O worker passou o smoke test de claim sem outbound e continua inativo até o
+teste positivo com uma classificação controlada e a validação real da Meta.
+Veja o estado e os bloqueios em
 [`docs/audit-2026-10-28.md`](docs/audit-2026-10-28.md).
 
 ## Arquitetura
@@ -36,7 +37,7 @@ Instagram/Meta
   -> PostgreSQL/Supabase (fonte de verdade)
   -> processing_jobs / worker
   -> process-social-engagement
-  -> classificador determinístico ou OpenAI
+  -> classificador determinístico ou Gemini conectado ao n8n
   -> funil central e funis verticais
   -> outbound_actions (política, revisão e auditoria)
   -> API oficial do Instagram

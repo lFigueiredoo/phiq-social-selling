@@ -3,8 +3,8 @@
 > **Documento histórico.** A checklist abaixo preserva o plano original, mas
 > não representa o estado atual do repositório. Em 28/10/2026 o núcleo local já
 > continha banco, Edge Functions, painel e testes. Na mesma data, banco,
-> funções e painel foram promovidos; OpenAI, worker n8n e smoke da Meta ainda
-> aguardavam configuração controlada. Use
+> funções e painel foram promovidos; o Gemini existente foi conectado ao novo
+> worker, enquanto ativação contínua e smoke da Meta aguardam homologação. Use
 > [`audit-2026-10-28.md`](audit-2026-10-28.md) como fonte de status e plano de
 > produção.
 
@@ -45,7 +45,7 @@ explicitamente. Nenhum passo avança automaticamente para o seguinte.
   da fila `processing_jobs` pelo worker (n8n).
 
 - [ ] **PASSO 08 — IA**
-  Integração com a OpenAI, sistema centralizado e versionado de
+  Integração com o Google Gemini conectado ao n8n, sistema versionado de
   prompts, primeira análise real de um comentário (intenção,
   sentimento, potencial comercial).
 

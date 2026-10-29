@@ -262,6 +262,6 @@ Registro explícito, para evitar ambiguidade futura:
 - Nenhum token gerado ou armazenado.
 - Nenhum comentário respondido, nenhuma DM enviada.
 - Nenhum webhook real configurado.
-- Nenhuma conexão com n8n ou OpenAI.
+- Nenhuma conexão com n8n ou provider de IA.
 - Nenhuma tabela criada, nenhuma alteração no Supabase.
 - Nenhum App Review iniciado.

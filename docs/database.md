@@ -686,4 +686,4 @@ quem mantém aquele domínio.
 criadas em migrations futuras, quando os respectivos fluxos (IA,
 comentários, DMs, lead score, etc.) forem implementados — conforme o
 roadmap. Também não foram criadas Edge Functions, nem qualquer conexão
-com Meta, OpenAI, n8n ou Google Sheets.
+com Meta, provider de IA, n8n ou Google Sheets.

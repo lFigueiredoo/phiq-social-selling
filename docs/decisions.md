@@ -38,7 +38,7 @@ assinatura em toda chamada de webhook.
 Supabase Edge Function, não o n8n.
 
 **Consequência:** A Edge Function precisa ser leve e determinística:
-validar, persistir e enfileirar — nada de chamadas à OpenAI ou à API do
+validar, persistir e enfileirar — nada de chamadas a provider de IA ou à API do
 Instagram nesse ponto.
 
 ---
