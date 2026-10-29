@@ -13,7 +13,7 @@ O ambiente local está executável e foi validado com:
 - 33 migrations aplicadas do zero em PostgreSQL 17;
 - 19 Edge Functions iniciadas no runtime local;
 - 8 contratos SQL/pgTAP, 2 testes de concorrência e 1 teste HTTP integrado;
-- 24 testes Node de contrato e 48 testes Python do coletor;
+- 25 testes Node de contrato e 48 testes Python do coletor;
 - build TypeScript/Vite, lint e `npm audit` de produção sem falhas;
 - frontend dividido por rota, sem o bundle monolítico anterior.
 
@@ -22,9 +22,10 @@ versionadas, com backup anterior ao deploy e testes negativos de autenticação.
 O painel CRM foi publicado em
 [`phiq-social-selling-panel.vercel.app`](https://phiq-social-selling-panel.vercel.app/)
 e validado com a conta administrativa. O modelo remoto está fixado em
-`gpt-6-luna`/`none`, mas ainda falta cadastrar `OPENAI_API_KEY`. O worker está
-versionado e validado, porém continua inativo até a configuração segura do
-contêiner n8n e o smoke test sem outbound. Veja o estado e os bloqueios em
+`gpt-6-luna`/`none`, mas ainda falta cadastrar `OPENAI_API_KEY`. O worker foi
+importado no n8n com credencial de cabeçalho criptografada e passou o smoke test
+de claim sem outbound. Ele continua inativo até o teste positivo com uma
+classificação controlada e a validação real da Meta. Veja o estado e os bloqueios em
 [`docs/audit-2026-10-28.md`](docs/audit-2026-10-28.md).
 
 ## Arquitetura

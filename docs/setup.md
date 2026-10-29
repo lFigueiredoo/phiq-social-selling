@@ -100,8 +100,11 @@ O coletor experimental possui uma suíte isolada:
 - `SOCIAL_CLASSIFIER_MODEL=gpt-6-luna` e
   `SOCIAL_CLASSIFIER_REASONING_EFFORT=none` configurados;
 - `OPENAI_API_KEY` ainda ausente;
-- workflow n8n versionado, mas ainda não importado/configurado/ativado.
+- workflow n8n importado e configurado com a credencial criptografada
+  `PHIQ Supabase Worker`; o smoke de claim sem item na fila foi aprovado e o
+  workflow permanece inativo.
 
 O restante da promoção deve preservar `INSTAGRAM_DISPATCH_DRY_RUN=true`, usar
-segredos diferentes por finalidade, configurar o n8n, processar um fixture sem
-outbound e somente depois validar um comentário autorizado da Meta.
+segredos diferentes por finalidade, cadastrar `OPENAI_API_KEY`, processar um
+fixture controlado sem outbound, publicar o worker e somente depois validar um
+comentário autorizado da Meta.
