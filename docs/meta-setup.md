@@ -1,5 +1,12 @@
 # Configuração Meta / Instagram
 
+> **Revalidação obrigatória:** este arquivo nasceu como plano anterior à
+> implementação e ainda contém campos históricos `[A PREENCHER]`. Já existem
+> funções e secrets no Supabase remoto, mas a auditoria de 28/10/2026 não teve
+> acesso ao App Dashboard da Meta para confirmar scopes, versão, modo, App
+> Review, subscription ou validade do token. Não trate os estados “NÃO FEITO”
+> abaixo como inventário atual; veja [`audit-2026-10-28.md`](audit-2026-10-28.md).
+
 Este documento registra a decisão de integração com a Meta, os
 pré-requisitos e o estado da configuração do app.
 

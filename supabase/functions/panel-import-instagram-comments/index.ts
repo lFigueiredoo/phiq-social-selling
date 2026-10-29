@@ -880,6 +880,16 @@ Deno.serve(async (req: Request) => {
           ? importRow.result
           : null;
 
+      if ((importResult === "imported" || importResult === "already_exists") && importRow?.webhook_event_id) {
+        const { error: crmError } = await supabase.rpc("ingest_social_comment_event", {
+          p_webhook_event_id: importRow.webhook_event_id,
+        });
+        if (crmError) {
+          console.error("historical social CRM ingestion failed", crmError.code);
+          return json(req, { ok: false, error: "crm_ingestion_failed" }, 500);
+        }
+      }
+
       if (importResult === "already_exists") {
         alreadyExists++;
         continue;

@@ -42,7 +42,7 @@ Deno.serve(async (req: Request) => {
   const action = typeof body?.action === "string" ? body.action : "";
   const jobId = typeof body?.job_id === "string" ? body.job_id : "";
   const workerId = typeof body?.worker_id === "string" ? body.worker_id : "";
-  if (!jobId || !workerId || (action !== "complete" && action !== "fail")) {
+  if (!jobId || !workerId || !["complete", "fail", "dead_letter"].includes(action)) {
     return Response.json({ ok: false, error: "invalid_request" }, { status: 400 });
   }
 
@@ -68,10 +68,26 @@ Deno.serve(async (req: Request) => {
     return Response.json({ ok: true, result: data[0] });
   }
 
-  const errorMessage = typeof body?.error === "string" ? body.error.trim() : "";
+  const errorMessage = typeof body?.error === "string" ? body.error.trim().slice(0, 500) : "";
   const retryAfterSeconds = Number.isInteger(body?.retry_after_seconds) ? body.retry_after_seconds : 60;
-  if (!errorMessage || retryAfterSeconds < 0) {
+  if (!errorMessage || (action === "fail" && retryAfterSeconds < 0)) {
     return Response.json({ ok: false, error: "invalid_fail_payload" }, { status: 400 });
+  }
+
+  if (action === "dead_letter") {
+    const { data, error } = await supabase.rpc("dead_letter_processing_job", {
+      p_job_id: jobId,
+      p_worker_id: workerId,
+      p_error: errorMessage,
+    });
+    if (error) {
+      console.error("dead_letter_processing_job failed", error.code);
+      return Response.json({ ok: false, error: "persistence_error" }, { status: 500 });
+    }
+    if (!Array.isArray(data) || data.length === 0) {
+      return Response.json({ ok: false, error: "job_not_claimed_by_worker" }, { status: 409 });
+    }
+    return Response.json({ ok: true, result: data[0] });
   }
 
   const { data, error } = await supabase.rpc("fail_processing_job", {

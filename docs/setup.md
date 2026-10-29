@@ -1,37 +1,107 @@
-# Setup — Estado atual do projeto
+# Setup local e de ambientes
 
-Este documento reflete apenas o que existe até o PASSO 01. Será
-atualizado a cada novo passo concluído.
+## Pré-requisitos
 
-## Estado atual
+- Docker Desktop em execução;
+- Supabase CLI compatível com o projeto;
+- Node.js 24+ e npm;
+- Python 3.12+ apenas para o coletor experimental;
+- acesso ao projeto Supabase remoto somente para operações deliberadas de
+  leitura/deploy.
 
-- Nenhum projeto Supabase foi criado ainda.
-- Nenhum App Meta foi criado ainda.
-- Nenhuma integração externa foi configurada.
-- Nenhuma dependência de código foi instalada ainda (não há
-  `package.json` neste passo — será criado quando o primeiro código
-  real, como a Edge Function, for implementado no PASSO 05, ou antes
-  se necessário no PASSO 02).
+## Supabase local
 
-## Pré-requisitos que você (usuário) vai precisar preparar nos próximos passos
+Na raiz do repositório:
 
-Estes itens não serão criados agora, apenas listados para
-planejamento:
+```powershell
+supabase start --exclude vector
+supabase db reset
+supabase test db
+```
 
-1. Conta Meta for Developers.
-2. Conta Instagram convertida para Business ou Creator.
-3. Projeto Supabase (pode ser criado no PASSO 02).
-4. Conta OpenAI com billing ativo.
-5. Projeto Google Cloud com Sheets API habilitada.
-6. Instância n8n (cloud ou self-hosted).
+`db reset` apaga os dados do banco **local** e reaplica todas as migrations.
+Não use flags remotas nesse comando. O Studio local fica, por padrão, em
+`http://127.0.0.1:54323`.
 
-## Variáveis de ambiente
+As Edge Functions leem automaticamente `supabase/functions/.env`. Um arquivo
+com outro nome só é carregado quando passado explicitamente:
 
-Ver `.env.example` na raiz do projeto. Nenhum valor real deve ser
-preenchido neste passo.
+```powershell
+supabase functions serve --env-file supabase/.env.functions.local
+```
 
-## Como rodar o projeto hoje
+Variáveis mínimas por fluxo:
 
-Ainda não há nada executável — este passo só criou a fundação
-documental e estrutural. A partir do PASSO 02, este arquivo passará a
-incluir instruções reais de setup do Supabase.
+| Fluxo | Variáveis adicionais |
+|---|---|
+| Webhook Meta | `META_APP_SECRET`, `META_VERIFY_TOKEN` |
+| Worker/classificação | `N8N_WORKER_SECRET` |
+| OpenAI para casos não determinísticos | `OPENAI_API_KEY`, `SOCIAL_CLASSIFIER_MODEL` |
+| Política/dispatch Meta | `META_ACCESS_TOKEN`, `META_API_VERSION` |
+| Painel no navegador | `PANEL_ALLOWED_ORIGINS` |
+
+Use `INSTAGRAM_DISPATCH_DRY_RUN=true` nos testes locais. Nunca reutilize o
+access token da Meta como verify token ou segredo do worker.
+
+## Painel web
+
+Crie `panel-web/.env.local`:
+
+```dotenv
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+VITE_SUPABASE_PUBLISHABLE_KEY=<chave-publicavel-local>
+```
+
+Depois:
+
+```powershell
+Set-Location panel-web
+npm ci
+npm run dev
+```
+
+Arquivos `.env` e `.env.local` são combinados pelo Vite, com o arquivo local
+normalmente prevalecendo. Mantenha apenas um destino ativo por máquina para não
+apontar o frontend local para o banco remoto por engano.
+
+## Testes
+
+```powershell
+Set-Location panel-web
+npm run check
+npm audit --omit=dev --audit-level=moderate
+Set-Location ..
+
+supabase test db
+node supabase/tests/vertical_concurrency.cjs
+node supabase/tests/social_orchestrator_concurrency.cjs
+```
+
+Com `supabase functions serve` ativo:
+
+```powershell
+node supabase/tests/social_orchestrator_http_local.cjs
+```
+
+O coletor experimental possui uma suíte isolada:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover `
+  -s .\collectors\instagram-likers -p 'test_*.py' -v
+```
+
+## Estado remoto observado em 28/10/2026
+
+- Projeto vinculado: `Base de Dados Phiq`;
+- 33 migrations alinhadas entre local e remoto;
+- `classify-social-lead`, `process-social-engagement` e `panel-social-crm`
+  implantadas, junto aos gateways atualizados do worker;
+- painel CRM publicado e validado no domínio Vercel de produção;
+- `SOCIAL_CLASSIFIER_MODEL=gpt-6-luna` e
+  `SOCIAL_CLASSIFIER_REASONING_EFFORT=none` configurados;
+- `OPENAI_API_KEY` ainda ausente;
+- workflow n8n versionado, mas ainda não importado/configurado/ativado.
+
+O restante da promoção deve preservar `INSTAGRAM_DISPATCH_DRY_RUN=true`, usar
+segredos diferentes por finalidade, configurar o n8n, processar um fixture sem
+outbound e somente depois validar um comentário autorizado da Meta.

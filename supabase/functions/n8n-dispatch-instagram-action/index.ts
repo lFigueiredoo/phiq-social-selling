@@ -26,6 +26,13 @@ function normalizeVersion(v: string): string {
   return /^v\d+\.\d+$/.test(trimmed) ? trimmed : "v26.0";
 }
 
+function dispatchDryRunEnabled(): boolean {
+  const configured = (Deno.env.get("INSTAGRAM_DISPATCH_DRY_RUN") ?? "true")
+    .trim()
+    .toLowerCase();
+  return configured !== "false";
+}
+
 const MAX_PUBLIC_REPLY_AUTHOR_LOOKUPS = 20;
 const PUBLIC_REPLY_AUTHOR_CONCURRENCY = 5;
 
@@ -185,6 +192,15 @@ Deno.serve(async (req: Request) => {
     ? body.dispatcher_id.trim()
     : "n8n-instagram-dispatcher-01";
   if (!actionId) return Response.json({ ok: false, error: "invalid_request" }, { status: 400 });
+
+  // Fail closed: an explicit false is required before any action is claimed
+  // or any request can reach the Meta API.
+  if (dispatchDryRunEnabled()) {
+    return Response.json(
+      { ok: false, error: "dispatch_dry_run_enabled" },
+      { status: 423 },
+    );
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const accessToken = Deno.env.get("META_ACCESS_TOKEN");

@@ -30,6 +30,8 @@
 -- ============================================================================
 
 begin;
+create extension if not exists pgtap with schema extensions;
+select extensions.plan(1);
 
 set local client_min_messages = notice;
 
@@ -785,4 +787,6 @@ end $$;
 -- ============================================================================
 -- Nada persiste. ROLLBACK obrigatório.
 -- ============================================================================
+select extensions.pass('panel backend integration contract');
+select * from extensions.finish();
 rollback;

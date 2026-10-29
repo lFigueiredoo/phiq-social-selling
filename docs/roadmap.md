@@ -1,5 +1,13 @@
 # Roadmap — Sistema de Social Selling para Instagram
 
+> **Documento histórico.** A checklist abaixo preserva o plano original, mas
+> não representa o estado atual do repositório. Em 28/10/2026 o núcleo local já
+> continha banco, Edge Functions, painel e testes. Na mesma data, banco,
+> funções e painel foram promovidos; OpenAI, worker n8n e smoke da Meta ainda
+> aguardavam configuração controlada. Use
+> [`audit-2026-10-28.md`](audit-2026-10-28.md) como fonte de status e plano de
+> produção.
+
 Cada passo só começa após o anterior estar concluído e aprovado
 explicitamente. Nenhum passo avança automaticamente para o seguinte.
 

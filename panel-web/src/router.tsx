@@ -1,13 +1,27 @@
 ﻿import { useEffect, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router";
+import { lazy, Suspense } from "react";
 import { useAuth } from "@/context/AuthProvider";
 import { useOrganization } from "@/context/OrganizationProvider";
 import { useMemberships } from "@/hooks/useMemberships";
-import { HistoricalCommentsPage } from "@/pages/HistoricalCommentsPage";
-import { LoginPage } from "@/pages/LoginPage";
-import { NoAccessPage } from "@/pages/NoAccessPage";
-import { QueuePage } from "@/pages/QueuePage";
-import { SelectOrganizationPage } from "@/pages/SelectOrganizationPage";
+const HistoricalCommentsPage = lazy(() => import("@/pages/HistoricalCommentsPage")
+  .then((module) => ({ default: module.HistoricalCommentsPage })));
+const LoginPage = lazy(() => import("@/pages/LoginPage")
+  .then((module) => ({ default: module.LoginPage })));
+const NoAccessPage = lazy(() => import("@/pages/NoAccessPage")
+  .then((module) => ({ default: module.NoAccessPage })));
+const QueuePage = lazy(() => import("@/pages/QueuePage")
+  .then((module) => ({ default: module.QueuePage })));
+const SelectOrganizationPage = lazy(() => import("@/pages/SelectOrganizationPage")
+  .then((module) => ({ default: module.SelectOrganizationPage })));
+const SocialOverviewPage = lazy(() => import("@/pages/SocialSellingPage")
+  .then((module) => ({ default: module.SocialOverviewPage })));
+const SocialLeadsPage = lazy(() => import("@/pages/SocialSellingPage")
+  .then((module) => ({ default: module.SocialLeadsPage })));
+const SocialFunnelPage = lazy(() => import("@/pages/SocialSellingPage")
+  .then((module) => ({ default: module.SocialFunnelPage })));
+const SocialLeadDetailPage = lazy(() => import("@/pages/SocialLeadDetailPage")
+  .then((module) => ({ default: module.SocialLeadDetailPage })));
 
 function FullScreenLoading() {
   return (
@@ -72,7 +86,8 @@ function AdminOnly({ children }: { children: ReactNode }) {
 
 export function AppRouter() {
   return (
-    <Routes>
+    <Suspense fallback={<FullScreenLoading />}>
+      <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/sem-acesso" element={<NoAccessPage />} />
       <Route
@@ -97,7 +112,12 @@ export function AppRouter() {
           </Protected>
         }
       />
+      <Route path="/social-selling" element={<Protected><SocialOverviewPage /></Protected>} />
+      <Route path="/social-selling/leads" element={<Protected><SocialLeadsPage /></Protected>} />
+      <Route path="/social-selling/funil" element={<Protected><SocialFunnelPage /></Protected>} />
+      <Route path="/social-selling/lead/:id" element={<Protected><SocialLeadDetailPage /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }

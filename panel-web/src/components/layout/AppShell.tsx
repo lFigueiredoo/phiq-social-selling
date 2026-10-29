@@ -3,6 +3,7 @@ import {
   Building2,
   History,
   Inbox,
+  TrendingUp,
   LogOut,
   ShieldCheck,
 } from "lucide-react";
@@ -97,6 +98,9 @@ export function AppShell({ children }: AppShellProps) {
           </div>
 
           <nav className="flex items-center gap-1 overflow-x-auto pb-3">
+            <NavLink to="/social-selling" className={({ isActive }) => navClassName(isActive)}>
+              <TrendingUp className="size-3.5" /> Social Selling
+            </NavLink>
             <NavLink
               to="/"
               end

@@ -1,0 +1,247 @@
+{
+  "name": "IG Social Selling — Orchestrator Worker",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "8db89fe6-675f-4a18-825b-013235ebfbbc",
+      "name": "Poll queue",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_FUNCTIONS_URL + '/n8n-claim-instagram-job' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-worker-secret",
+              "value": "={{ $env.N8N_WORKER_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ worker_id: 'n8n-social-selling-primary' }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "c7a9009d-93e7-450e-93ce-e7f47de2231c",
+      "name": "Claim next job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first()?.json ?? {};\nconst status = Number(response.statusCode ?? 200);\nconst body = response.body ?? response;\nif (status < 200 || status >= 300 || body.ok !== true) {\n  throw new Error(`claim_failed:${status}`);\n}\nif (!body.job) return [];\nconst engagement = body.engagement ?? {\n  organization_id: body.event?.organization_id,\n  instagram_account_id: body.event?.instagram_account_id,\n  webhook_event_id: body.event?.id,\n  external_engagement_id: body.event?.comment_id,\n  engagement_type: 'comment',\n  source: 'realtime',\n  occurred_at: body.event?.received_at,\n};\nreturn [{ json: { claim: body, engagement } }];"
+      },
+      "id": "b01cef82-ec79-4780-9d66-f8b57c156b38",
+      "name": "Gate claimed job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_FUNCTIONS_URL + '/process-social-engagement' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-worker-secret",
+              "value": "={{ $env.N8N_WORKER_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ job_id: $json.claim.job.id, worker_id: $json.claim.job.locked_by, engagement: $json.engagement }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 25000
+        }
+      },
+      "id": "563c8e0f-bc10-434d-b3a8-a678298e3b7f",
+      "name": "Process engagement",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -20,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first()?.json ?? {};\nconst status = Number(response.statusCode ?? 200);\nconst body = response.body ?? response;\nconst claim = $('Gate claimed job').first().json.claim;\nconst completed = new Set(['classified', 'routed', 'no_profile', 'needs_more_signal', 'lead_closed', 'already_processed']);\nlet action = 'fail';\nlet error = body.error_code ?? body.error ?? `pipeline_http_${status}`;\nif (status >= 200 && status < 300 && completed.has(body.result_code)) {\n  action = 'complete';\n  error = '';\n} else if (status === 400 || body.result_code === 'terminal_error') {\n  action = 'dead_letter';\n  error = `terminal:${body.error_code ?? body.error ?? 'invalid_pipeline_input'}`;\n}\nconst attempts = Number(claim.job.attempts ?? 1);\nconst retryAfterSeconds = Math.min(900, 30 * (2 ** Math.max(0, attempts - 1)));\nreturn [{ json: {\n  action,\n  job_id: claim.job.id,\n  worker_id: claim.job.locked_by,\n  error: String(error).slice(0, 500),\n  retry_after_seconds: retryAfterSeconds,\n  result_code: body.result_code ?? null,\n} }];"
+      },
+      "id": "9e59cac8-c762-40d7-bc42-cd63a2e81784",
+      "name": "Normalize outcome",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_FUNCTIONS_URL + '/n8n-update-instagram-job' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "content-type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-worker-secret",
+              "value": "={{ $env.N8N_WORKER_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": false,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "8683da7b-9e46-452b-9586-a91182a42c22",
+      "name": "Finalize job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        500,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Poll queue": {
+      "main": [
+        [
+          {
+            "node": "Claim next job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim next job": {
+      "main": [
+        [
+          {
+            "node": "Gate claimed job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate claimed job": {
+      "main": [
+        [
+          {
+            "node": "Process engagement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process engagement": {
+      "main": [
+        [
+          {
+            "node": "Normalize outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize outcome": {
+      "main": [
+        [
+          {
+            "node": "Finalize job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": false,
+    "executionTimeout": 120
+  },
+  "versionId": "5cf21ad4-42d1-45cf-b493-38c35dbc27a3",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

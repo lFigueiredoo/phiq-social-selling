@@ -117,6 +117,7 @@ Deno.serve(async (req: Request) => {
   if (!change) {
     return json({
       ok: true,
+      engagement: null,
       job: {
         id: job.id,
         type: job.job_type,
@@ -128,6 +129,8 @@ Deno.serve(async (req: Request) => {
       },
       event: {
         id: event.id,
+        organization_id: event.organization_id,
+        instagram_account_id: event.instagram_account_id,
         type: event.event_type,
         received_at: event.received_at,
         comment_id: event.external_object_id,
@@ -136,8 +139,38 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  const commenterId = change?.value?.from?.id != null ? String(change.value.from.id) : null;
+  const username = typeof change?.value?.from?.username === "string"
+    ? change.value.from.username.trim() || null
+    : null;
+  const displayName = typeof change?.value?.from?.name === "string"
+    ? change.value.from.name.trim() || null
+    : null;
+  const commentId = change?.value?.id != null
+    ? String(change.value.id)
+    : event.external_object_id != null ? String(event.external_object_id) : null;
+  const mediaId = change?.value?.media?.id != null ? String(change.value.media.id) : null;
+  const mediaProductType = typeof change?.value?.media?.media_product_type === "string"
+    ? change.value.media.media_product_type
+    : null;
+
   return json({
     ok: true,
+    engagement: {
+      organization_id: event.organization_id,
+      instagram_account_id: event.instagram_account_id,
+      external_user_id: commenterId,
+      username,
+      display_name: displayName,
+      engagement_type: "comment",
+      external_engagement_id: commentId,
+      webhook_event_id: event.id,
+      text: typeof change?.value?.text === "string" ? change.value.text.slice(0, 2000) : "",
+      source: "realtime",
+      occurred_at: event.received_at,
+      media_external_id: mediaId,
+      metadata: mediaProductType ? { media_product_type: mediaProductType } : {},
+    },
     job: {
       id: job.id,
       type: job.job_type,
@@ -149,20 +182,20 @@ Deno.serve(async (req: Request) => {
     },
     event: {
       id: event.id,
+      organization_id: event.organization_id,
+      instagram_account_id: event.instagram_account_id,
       type: event.event_type,
       received_at: event.received_at,
       instagram_user_id: entry?.id != null ? String(entry.id) : null,
-      comment_id: change?.value?.id != null ? String(change.value.id) : null,
+      comment_id: commentId,
       comment_text: typeof change?.value?.text === "string" ? change.value.text : null,
       commenter: {
-        id: change?.value?.from?.id != null ? String(change.value.from.id) : null,
-        username: typeof change?.value?.from?.username === "string" ? change.value.from.username : null,
+        id: commenterId,
+        username,
       },
       media: {
-        id: change?.value?.media?.id != null ? String(change.value.media.id) : null,
-        media_product_type: typeof change?.value?.media?.media_product_type === "string"
-          ? change.value.media.media_product_type
-          : null,
+        id: mediaId,
+        media_product_type: mediaProductType,
       },
     },
   });

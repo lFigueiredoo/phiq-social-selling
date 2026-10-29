@@ -208,6 +208,16 @@ Deno.serve(async (req: Request) => {
           return new Response("Temporary queue error", { status: 500 });
         }
       }
+
+      // Both ingestion paths use one backend CRM service. The RPC is idempotent,
+      // so a Meta retry can repair a previous failure without duplicating data.
+      const { error: crmError } = await supabase.rpc("ingest_social_comment_event", {
+        p_webhook_event_id: eventId,
+      });
+      if (crmError) {
+        console.error("social CRM ingestion failed", crmError.code);
+        return new Response("Temporary CRM error", { status: 500 });
+      }
     }
   }
 

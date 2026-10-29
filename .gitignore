@@ -3,6 +3,7 @@ node_modules/
 
 # Variáveis de ambiente e segredos
 .env
+.env.*
 .env.local
 .env.production
 .env.*.local
@@ -16,6 +17,9 @@ dist/
 build/
 .turbo/
 .cache/
+.venv/
+**/__pycache__/
+*.py[cod]
 
 # Supabase local
 supabase/.branches/
@@ -33,6 +37,13 @@ npm-debug.log*
 
 # Nunca ignorar o exemplo de variáveis de ambiente
 !.env.example
+!*.example
+
+# Local Instagram liker collector data and sessions
+collectors/instagram-likers/output/
+collectors/instagram-likers/session*
+collectors/instagram-likers/browser-profile/
+*.session.json
 
 # Fixtures locais de desenvolvimento
 supabase/seed.local.sql

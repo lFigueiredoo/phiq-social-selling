@@ -117,9 +117,11 @@ apenas refletem o que já está no banco.
 - Curtidas individuais não fazem parte do escopo do MVP.
 - Nenhuma automação depende de descobrir se um perfil é público.
 
-## Status atual (PASSO 01)
+## Status observado em 28/10/2026
 
-Neste momento, nenhuma das camadas acima está implementada. Este
-documento registra a arquitetura aprovada para orientar as próximas
-etapas (ver `roadmap.md`). Ainda não existem: projeto Supabase, App
-Meta, integração com OpenAI, fluxos n8n, banco de dados ou tabelas.
+O banco, as Edge Functions, o classificador, os funis e o painel estão
+implementados e validados localmente. O Supabase remoto ainda não recebeu as
+seis migrations e três funções mais novas; o worker n8n do novo orquestrador
+também não está versionado. A configuração do App Meta precisa ser revalidada
+no dashboard. O inventário detalhado e o plano de produção estão em
+[`audit-2026-10-28.md`](audit-2026-10-28.md).
