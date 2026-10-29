@@ -41,6 +41,13 @@ Deno.serve(async (req: Request) => {
     const actionId = requireUuid(body?.outbound_action_id, "outbound_action_id");
     const organizationId = requireUuid(body?.organization_id, "organization_id");
 
+    // Aprovar torna a ação elegível para o dispatcher. Exigimos uma
+    // confirmação explícita do cliente para impedir que UIs antigas ou
+    // chamadas acidentais tratem aprovação como uma operação inofensiva.
+    if (body?.acknowledge_automatic_dispatch !== true) {
+      throw new HttpError(400, "dispatch_acknowledgement_required");
+    }
+
     const supabase = adminClient();
     const { userId } = await requireUser(req, supabase);
 

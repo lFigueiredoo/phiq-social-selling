@@ -164,3 +164,26 @@ o dispatcher permanece fora desse workflow.
 **Consequência:** Erro do modelo não conclui silenciosamente o job, reexecuções
 não duplicam propostas e nenhuma nova função chama a API do Instagram. Private
 Reply e DM permanecem fora deste estágio até uma decisão e homologação próprias.
+
+---
+
+## ADR-010 — Aprovação libera o dispatcher e exige confirmação explícita
+
+**Status:** Aprovado em 29/10/2026
+
+**Contexto:** A frase anterior "aprovar não envia imediatamente" era
+tecnicamente verdadeira para o clique, mas ocultava que um workflow publicado
+consulta a fila aprovada a cada minuto e pode enviar logo depois. A auditoria
+também encontrou uma versão remota do dispatcher sem a trava dry-run já
+presente no repositório.
+
+**Decisão:** O dispatcher falha fechado por padrão e só pode chamar a Meta
+quando `INSTAGRAM_DISPATCH_DRY_RUN=false` estiver explicitamente configurado.
+O painel mostra se o modo está bloqueado ou ativo, exige confirmação visual e
+envia `acknowledge_automatic_dispatch=true` para a API. Edição não salva impede
+a aprovação.
+
+**Consequência:** Nenhuma UI ou cliente antigo consegue aprovar silenciosamente.
+Quando o modo estiver ativo, o revisor é informado de que a aprovação libera
+envio automático; quando estiver em dry-run, a decisão pode ser auditada sem
+tráfego outbound.

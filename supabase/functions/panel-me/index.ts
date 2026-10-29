@@ -38,10 +38,22 @@ Deno.serve(async (req: Request) => {
       return json(req, { ok: false, error: mapped.error }, mapped.status);
     }
 
+    // Fail closed, exatamente como o dispatcher: somente o valor literal
+    // "false" libera envio. O painel recebe apenas o estado operacional;
+    // nenhum segredo ou valor de configuração é exposto ao navegador.
+    const dispatchDryRun =
+      (Deno.env.get("INSTAGRAM_DISPATCH_DRY_RUN") ?? "true")
+        .trim()
+        .toLowerCase() !== "false";
+
     return json(req, {
       ok: true,
       user: { id: userId },
       memberships: Array.isArray(data) ? data : [],
+      dispatch: {
+        mode: dispatchDryRun ? "dry_run" : "live",
+        automatic_dispatch_enabled: !dispatchDryRun,
+      },
     });
   } catch (err) {
     const mapped = toHttpError(err);

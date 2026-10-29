@@ -1,6 +1,16 @@
-import { Check, Globe2, MessageCircle, PencilLine, Send, Sparkles, UserRound, X } from "lucide-react";
+import { Check, Globe2, MessageCircle, PencilLine, Send, ShieldAlert, ShieldCheck, Sparkles, UserRound, X } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -8,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EligibilityCountdown } from "@/components/queue/EligibilityCountdown";
 import { RejectDialog } from "@/components/queue/RejectDialog";
 import { useApproveAction } from "@/hooks/useApproveAction";
+import { useMemberships } from "@/hooks/useMemberships";
 import { useRejectAction } from "@/hooks/useRejectAction";
 import { useUpdateActionMessage } from "@/hooks/useUpdateActionMessage";
 import { cn } from "@/lib/utils";
@@ -82,8 +93,13 @@ interface ActionCardProps {
 export function ActionCard({ action, organizationId }: ActionCardProps) {
   const [messageDraft, setMessageDraft] = useState(action.message_text);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
 
-  const approveAction = useApproveAction(organizationId);
+  const { data: membershipData } = useMemberships();
+  const automaticDispatchEnabled =
+    membershipData?.dispatch?.automatic_dispatch_enabled === true;
+
+  const approveAction = useApproveAction(organizationId, automaticDispatchEnabled);
   const rejectAction = useRejectAction(organizationId);
   const updateMessage = useUpdateActionMessage(organizationId);
 
@@ -239,14 +255,57 @@ export function ActionCard({ action, organizationId }: ActionCardProps) {
           </Button>
           <Button
             className="shadow-sm"
-            disabled={isBusy}
-            onClick={() => approveAction.mutate(action.outbound_action_id)}
+            disabled={isBusy || hasMessageChanged}
+            onClick={() => setApprovalDialogOpen(true)}
           >
             <Check className="size-3.5" />
-            {approveAction.isPending ? "Aprovando…" : "Aprovar para envio"}
+            {approveAction.isPending ? "Aprovando…" : "Revisar e liberar"}
           </Button>
         </footer>
+        {hasMessageChanged && (
+          <p className="text-right text-xs font-medium text-amber-700 dark:text-amber-300">
+            Salve a edição antes de liberar esta resposta.
+          </p>
+        )}
       </CardContent>
+
+      <AlertDialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar aprovação</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <div className="rounded-lg border bg-muted/40 p-3 text-foreground">
+                  {action.message_text}
+                </div>
+                <p className="flex items-start gap-2">
+                  {automaticDispatchEnabled
+                    ? <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                    : <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" />}
+                  <span>
+                    {automaticDispatchEnabled
+                      ? "Ao confirmar, o dispatcher poderá enviar esta resposta automaticamente em até 1 minuto."
+                      : "O modo seguro está ativo: a decisão será registrada, mas o envio ao Instagram continuará bloqueado."}
+                  </span>
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={approveAction.isPending}>Voltar e revisar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={approveAction.isPending}
+              onClick={() => {
+                approveAction.mutate(action.outbound_action_id, {
+                  onSuccess: () => setApprovalDialogOpen(false),
+                });
+              }}
+            >
+              {automaticDispatchEnabled ? "Aprovar e liberar envio" : "Aprovar em modo seguro"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <RejectDialog
         open={rejectDialogOpen}

@@ -1,10 +1,11 @@
 import { callPanelFunction } from "@/lib/api/client";
-import type { PanelMembership } from "@/lib/api/types";
+import type { PanelDispatchStatus, PanelMembership } from "@/lib/api/types";
 
-interface PanelMeResponse {
+export interface PanelMeResponse {
   ok: true;
   user: { id: string };
   memberships: PanelMembership[];
+  dispatch: PanelDispatchStatus;
 }
 
 export async function fetchPanelMe(): Promise<PanelMeResponse> {

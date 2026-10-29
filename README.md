@@ -6,28 +6,32 @@ recebe webhooks assinados, persiste eventos idempotentes, classifica o contexto
 com regras determinísticas/IA, conduz o lead pelos funis e mantém qualquer ação
 de saída sob política e aprovação.
 
-## Estado validado em 28/10/2026
+## Estado validado em 29/10/2026
 
 O ambiente local está executável e foi validado com:
 
-- 33 migrations aplicadas do zero em PostgreSQL 17;
-- 19 Edge Functions iniciadas no runtime local;
-- 8 contratos SQL/pgTAP, 2 testes de concorrência e 1 teste HTTP integrado;
-- 26 testes Node de contrato e 48 testes Python do coletor;
+- 34 migrations aplicadas do zero em PostgreSQL 17;
+- 21 Edge Functions versionadas;
+- 9 contratos SQL/pgTAP, 2 testes de concorrência e 1 teste HTTP integrado;
+- 35 testes Node de contrato e 48 testes Python do coletor;
 - build TypeScript/Vite, lint e `npm audit` de produção sem falhas;
 - frontend dividido por rota, sem o bundle monolítico anterior.
 
-Em 28/10/2026, o Supabase remoto foi alinhado às 33 migrations e às funções
+O Supabase remoto foi alinhado às 34 migrations e às funções
 versionadas, com backup anterior ao deploy e testes negativos de autenticação.
 O painel CRM foi publicado em
 [`phiq-social-selling-panel.vercel.app`](https://phiq-social-selling-panel.vercel.app/)
 e validado com a conta administrativa. A classificação não determinística usa o
 Google Gemini já conectado ao n8n pela credencial criptografada
 `Google Gemini(PaLM) Api account`; o Supabase não precisa de chave de provider.
-O worker passou o smoke test de claim sem outbound e continua inativo até o
-teste positivo com uma classificação controlada e a validação real da Meta.
-Veja o estado e os bloqueios em
-[`docs/audit-2026-10-28.md`](docs/audit-2026-10-28.md).
+O worker publicado classifica e atualiza o CRM. A versão com geração de
+rascunhos Gemini está validada no repositório, mas sua promoção no n8n ainda
+precisa substituir o rascunho duplicado criado pelo import incremental. Uma
+auditoria do banco confirmou 12 envios antigos (o último em 15/09/2026) e
+nenhum envio em 29/10/2026. O dispatcher foi novamente implantado e está
+bloqueado em produção por `INSTAGRAM_DISPATCH_DRY_RUN=true`.
+Veja o estado atual em
+[`docs/audit-2026-10-29.md`](docs/audit-2026-10-29.md).
 
 ## Arquitetura
 
@@ -122,5 +126,5 @@ decisão arquitetural e revisão de risco.
   App Dashboard da Meta e faça backup do banco remoto.
 
 Consulte [`docs/setup.md`](docs/setup.md) para o setup detalhado e
-[`docs/audit-2026-10-28.md`](docs/audit-2026-10-28.md) para achados, correções
+[`docs/audit-2026-10-29.md`](docs/audit-2026-10-29.md) para achados, correções
 e bloqueios de produção.

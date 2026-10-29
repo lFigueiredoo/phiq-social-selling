@@ -17,6 +17,7 @@ export async function approvePanelAction(
       body: {
         outbound_action_id: outboundActionId,
         organization_id: organizationId,
+        acknowledge_automatic_dispatch: true,
       },
     },
   );

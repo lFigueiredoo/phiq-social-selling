@@ -93,7 +93,7 @@ O coletor experimental possui uma suíte isolada:
 ## Estado remoto observado em 28/10/2026
 
 - Projeto vinculado: `Base de Dados Phiq`;
-- 33 migrations alinhadas entre local e remoto;
+- 34 migrations alinhadas entre local e remoto;
 - `classify-social-lead`, `process-social-engagement` e `panel-social-crm`
   implantadas, junto aos gateways atualizados do worker;
 - painel CRM publicado e validado no domínio Vercel de produção;
@@ -108,3 +108,20 @@ O restante da promoção deve preservar `INSTAGRAM_DISPATCH_DRY_RUN=true`, usar
 segredos diferentes por finalidade, processar um fixture controlado com Gemini
 e sem outbound, publicar o worker e somente depois validar um comentário
 autorizado da Meta.
+
+## Corte de segurança de 29/10/2026
+
+- `INSTAGRAM_DISPATCH_DRY_RUN=true` foi gravado explicitamente nos secrets do
+  projeto remoto;
+- `n8n-dispatch-instagram-action` foi reimplantada com a trava fail-closed
+  executada antes do claim da ação e antes de qualquer chamada à Meta;
+- o painel passou a expor o modo operacional sem revelar secrets;
+- aprovação pelo painel exige `acknowledge_automatic_dispatch=true` e uma
+  confirmação visual do revisor;
+- edições não salvas bloqueiam a aprovação, evitando liberar um texto antigo;
+- o dispatcher agendado pode continuar consultando a fila, mas recebe `423`
+  enquanto o dry-run estiver ativo e não reclama nem envia a ação.
+
+Nunca altere o secret para `false` apenas para testar conectividade. A retirada
+do dry-run é uma mudança de produção separada, com uma única ação controlada,
+rollback preparado e conferência do registro `sent_at/provider_action_id`.

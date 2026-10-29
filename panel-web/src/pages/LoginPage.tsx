@@ -33,7 +33,7 @@ export function LoginPage() {
         </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          A aprovação não dispara mensagens diretamente. O dispatcher permanece separado.
+          Aprovar libera a ação para o dispatcher. O painel mostra se o envio automático está bloqueado ou ativo.
         </p>
       </div>
     </div>

@@ -6,6 +6,11 @@ export interface PanelMembership {
   role: PanelRole;
 }
 
+export interface PanelDispatchStatus {
+  mode: "dry_run" | "live";
+  automatic_dispatch_enabled: boolean;
+}
+
 export type ActionType = "public_reply" | "private_reply";
 
 export type ActionSource = "realtime" | "historical_backfill";

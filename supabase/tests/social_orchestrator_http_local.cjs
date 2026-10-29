@@ -36,16 +36,12 @@ function moduleFrom(relative, mocks = {}) {
     const raw = execSync('npx supabase status --output json', { cwd: root, encoding: 'utf8' });
     const local = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
     const classifier = moduleFrom('supabase/functions/_shared/socialClassifier.ts').exports;
-    const adapter = moduleFrom('supabase/functions/_shared/openaiSocialClassifier.ts', {
-      require: spec => spec.includes('socialClassifier.ts') ? classifier : {},
-    }).exports;
     const env = { N8N_WORKER_SECRET: 'local-http-test-only', SUPABASE_URL: local.API_URL,
       SUPABASE_SERVICE_ROLE_KEY: local.SERVICE_ROLE_KEY };
     const { handler } = moduleFrom('supabase/functions/process-social-engagement/index.ts', {
       env, require: spec => {
         if (spec.includes('supabase-js')) return { createClient };
         if (spec.includes('socialClassifier.ts')) return classifier;
-        if (spec.includes('openaiSocialClassifier.ts')) return adapter;
         return {};
       },
     });

@@ -1,10 +1,11 @@
-import { History, Sparkles } from "lucide-react";
+import { History, ShieldAlert, ShieldCheck, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { HistoricalTabs } from "@/components/historical/HistoricalTabs";
 import { AppShell } from "@/components/layout/AppShell";
 import { ActionFilters } from "@/components/queue/ActionFilters";
 import { ActionQueueList } from "@/components/queue/ActionQueueList";
 import { useOrganization } from "@/context/OrganizationProvider";
+import { useMemberships } from "@/hooks/useMemberships";
 import type { ActionSource, PanelListActionsFilters } from "@/lib/api/types";
 
 interface ApprovalQueuePageProps {
@@ -14,7 +15,10 @@ interface ApprovalQueuePageProps {
 
 function ApprovalQueuePage({ source, historical = false }: ApprovalQueuePageProps) {
   const { organizationId } = useOrganization();
+  const { data: membershipData } = useMemberships();
   const [filters, setFilters] = useState<PanelListActionsFilters>({ source });
+  const automaticDispatchEnabled =
+    membershipData?.dispatch?.automatic_dispatch_enabled === true;
 
   if (!organizationId) return null;
 
@@ -51,9 +55,22 @@ function ApprovalQueuePage({ source, historical = false }: ApprovalQueuePageProp
                 : "Revise a sugestão da IA, ajuste o texto quando necessário e decida o que está pronto para seguir ao dispatcher."}
             </p>
           </div>
-          <div className="rounded-xl border border-primary/15 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground sm:max-w-xs">
-            <strong className="font-semibold text-foreground">Aprovar não envia imediatamente.</strong>{" "}
-            O envio continua separado e controlado pelo dispatcher.
+          <div
+            className={automaticDispatchEnabled
+              ? "rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100 sm:max-w-xs"
+              : "rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100 sm:max-w-xs"}
+          >
+            <strong className="flex items-center gap-1.5 font-semibold">
+              {automaticDispatchEnabled
+                ? <ShieldAlert className="size-3.5" />
+                : <ShieldCheck className="size-3.5" />}
+              {automaticDispatchEnabled ? "Envio automático ativo" : "Modo seguro: envio bloqueado"}
+            </strong>
+            <span className="mt-1 block">
+              {automaticDispatchEnabled
+                ? "Aprovar libera o dispatcher, que pode tentar o envio automaticamente em até 1 minuto."
+                : "Aprovar registra a decisão, mas o dispatcher não pode chamar o Instagram."}
+            </span>
           </div>
         </section>
 

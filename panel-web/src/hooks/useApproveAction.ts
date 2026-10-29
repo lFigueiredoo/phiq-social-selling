@@ -19,7 +19,10 @@ function removeFromCachedQueue(
   };
 }
 
-export function useApproveAction(organizationId: string | null) {
+export function useApproveAction(
+  organizationId: string | null,
+  automaticDispatchEnabled: boolean,
+) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -29,7 +32,11 @@ export function useApproveAction(organizationId: string | null) {
     },
     onSuccess: (approval, outboundActionId) => {
       if (!approval.already_approved) {
-        toast.success("Ação aprovada para envio. Removida da fila de revisão.");
+        toast.success(
+          automaticDispatchEnabled
+            ? "Ação aprovada. O dispatcher pode enviá-la automaticamente."
+            : "Ação aprovada, mas o envio permanece bloqueado pelo modo seguro.",
+        );
       }
       queryClient.setQueriesData<InfiniteData<PanelListActionsResponse>>(
         { queryKey: ["panel-actions", organizationId] },
