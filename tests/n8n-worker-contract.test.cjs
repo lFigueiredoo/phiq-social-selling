@@ -61,4 +61,13 @@ test('claim gate accepts serialized JSON returned by n8n full response mode', ()
       json: { statusCode: 200, body: JSON.stringify({ ok: true, job, engagement }) },
     }),
   }), [{ json: { claim: { ok: true, job, engagement }, engagement } }]);
+
+  const streamEnvelope = {
+    _readableState: {
+      buffer: [{ type: 'Buffer', data: [...Buffer.from(JSON.stringify({ ok: true, job: null }))] }],
+    },
+  };
+  assert.deepEqual(executeGate({
+    first: () => ({ json: { statusCode: 200, body: streamEnvelope } }),
+  }), []);
 });
