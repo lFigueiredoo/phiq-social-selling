@@ -120,8 +120,8 @@ apenas refletem o que já está no banco.
 ## Status observado em 28/10/2026
 
 O banco, as Edge Functions, o classificador, os funis e o painel estão
-implementados. O Supabase remoto foi alinhado e o worker está versionado. A
-versão com Gemini conectado ainda precisa de importação, fixture positivo e
-ativação controlada. A configuração do App Meta precisa ser revalidada no
+implementados. O Supabase remoto foi alinhado e a versão do worker com Gemini
+conectado foi importada e aprovada em smoke de fila vazia. Ainda faltam fixture
+positivo e ativação controlada. A configuração do App Meta precisa ser revalidada no
 dashboard. O inventário detalhado e o plano de produção estão em
 [`audit-2026-10-28.md`](audit-2026-10-28.md).
