@@ -103,4 +103,28 @@ test('claim gate accepts serialized JSON returned by n8n full response mode', ()
   assert.deepEqual(executeGate({
     first: () => ({ json: { statusCode: 200, body: streamEnvelope } }),
   }), []);
+
+  const nestedStreamEnvelope = {
+    body: {
+      _readableState: {
+        buffer: {
+          head: {
+            data: [...Buffer.from(JSON.stringify({ ok: true, job: null }))],
+          },
+        },
+      },
+    },
+  };
+  assert.deepEqual(executeGate({
+    first: () => ({ json: { statusCode: 200, data: nestedStreamEnvelope } }),
+  }), []);
+
+  assert.deepEqual(executeGate({
+    first: () => ({
+      json: {
+        statusCode: 200,
+        body: { data: JSON.stringify({ ok: true, job: null }) },
+      },
+    }),
+  }), []);
 });
