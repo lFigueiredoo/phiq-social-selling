@@ -24,9 +24,10 @@ O painel CRM foi publicado em
 e validado com a conta administrativa. A classificação não determinística usa o
 Google Gemini já conectado ao n8n pela credencial criptografada
 `Google Gemini(PaLM) Api account`; o Supabase não precisa de chave de provider.
-O worker publicado classifica e atualiza o CRM. A versão com geração de
-rascunhos Gemini está validada no repositório, mas sua promoção no n8n ainda
-precisa substituir o rascunho duplicado criado pelo import incremental. Uma
+O worker `IG Social Selling — Orchestrator Worker` foi limpo e publicado com
+19 nós, um único agendamento e geração de rascunhos Gemini para aprovação
+humana. A execução controlada de produção concluiu com sucesso em 9,64 s e
+encerrou no gate de fila vazia, sem criar ou enviar ação externa. Uma
 auditoria do banco confirmou 12 envios antigos (o último em 15/09/2026) e
 nenhum envio em 29/10/2026. Em 23/11/2026, o token Meta de
 `@phiq.oficial` foi renovado e o painel voltou a ler mídias e contagens reais.
@@ -36,7 +37,7 @@ e dead letter para webhook sem mapeamento. O modo ativo continua sendo
 `instagram_login` e o dispatcher permanece bloqueado em produção por
 `INSTAGRAM_DISPATCH_DRY_RUN=true`.
 Veja [`docs/meta-setup.md`](docs/meta-setup.md) e o último inventário completo em
-[`docs/audit-2026-10-29.md`](docs/audit-2026-10-29.md).
+[`docs/audit-2026-11-23.md`](docs/audit-2026-11-23.md).
 
 ## Arquitetura
 

@@ -90,10 +90,10 @@ O coletor experimental possui uma suíte isolada:
   -s .\collectors\instagram-likers -p 'test_*.py' -v
 ```
 
-## Estado remoto observado em 28/10/2026
+## Estado remoto observado em 23/11/2026
 
 - Projeto vinculado: `Base de Dados Phiq`;
-- 34 migrations alinhadas entre local e remoto;
+- 35 migrations alinhadas entre local e remoto;
 - `classify-social-lead`, `process-social-engagement` e `panel-social-crm`
   implantadas, junto aos gateways atualizados do worker;
 - painel CRM publicado e validado no domínio Vercel de produção;
@@ -101,13 +101,16 @@ O coletor experimental possui uma suíte isolada:
   `Google Gemini(PaLM) Api account` e modelo
   `models/gemini-3-flash-preview`;
 - nenhuma chave de provider AI é necessária no Supabase;
-- workflow n8n configurado com `PHIQ Supabase Worker`; o smoke de claim sem
-  item na fila foi aprovado e a versão com Gemini permanece inativa.
+- workflow n8n configurado com `PHIQ Supabase Worker`, publicado com 19 nós e
+  um único agendamento; o smoke de claim sem item na fila concluiu com sucesso
+  em 9,64 s;
+- classificação e rascunhos usam o Gemini conectado; rascunhos continuam como
+  `proposed` e exigem aprovação humana.
 
-O restante da promoção deve preservar `INSTAGRAM_DISPATCH_DRY_RUN=true`, usar
-segredos diferentes por finalidade, processar um fixture controlado com Gemini
-e sem outbound, publicar o worker e somente depois validar um comentário
-autorizado da Meta.
+A operação deve preservar `INSTAGRAM_DISPATCH_DRY_RUN=true`, usar segredos
+diferentes por finalidade e validar qualquer fixture Gemini sem outbound. A
+retirada do dry-run continua sendo uma mudança separada, com rollback e uma
+ação explicitamente autorizada.
 
 ## Corte de segurança de 29/10/2026
 

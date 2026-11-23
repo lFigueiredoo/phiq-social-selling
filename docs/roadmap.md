@@ -4,9 +4,9 @@
 > não representa o estado atual do repositório. Em 28/10/2026 o núcleo local já
 > continha banco, Edge Functions, painel e testes. Na mesma data, banco,
 > funções e painel foram promovidos; o Gemini existente foi conectado ao novo
-> worker, enquanto ativação contínua e smoke da Meta aguardam homologação. Use
-> [`audit-2026-10-28.md`](audit-2026-10-28.md) como fonte de status e plano de
-> produção.
+> worker. A promoção limpa do worker e a renovação Meta foram concluídas em
+> 23/11/2026. Use [`audit-2026-11-23.md`](audit-2026-11-23.md) como fonte de
+> status e plano de produção.
 
 Cada passo só começa após o anterior estar concluído e aprovado
 explicitamente. Nenhum passo avança automaticamente para o seguinte.
