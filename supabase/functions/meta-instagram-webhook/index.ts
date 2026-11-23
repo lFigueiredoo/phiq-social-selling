@@ -63,19 +63,84 @@ function normalizedChanges(entry: any): Array<{ field: string; value: any }> {
   return [];
 }
 
+function configuredValues(...names: string[]): string[] {
+  return [...new Set(
+    names
+      .map((name) => Deno.env.get(name)?.trim() ?? "")
+      .filter(Boolean),
+  )];
+}
+
+async function resolveInstagramAccount(
+  supabase: any,
+  webhookEntryId: string,
+): Promise<{
+  account: { id: string; organization_id: string; external_id: string } | null;
+  error: string | null;
+}> {
+  const { data: alias, error: aliasError } = await supabase
+    .from("instagram_account_identifiers")
+    .select("instagram_account_id, organization_id")
+    .eq("identifier_type", "webhook_entry_id")
+    .eq("external_id", webhookEntryId)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (aliasError) {
+    return { account: null, error: aliasError.code ?? "alias_lookup_failed" };
+  }
+
+  if (alias?.instagram_account_id) {
+    const { data: account, error: accountError } = await supabase
+      .from("instagram_accounts")
+      .select("id, organization_id, external_id")
+      .eq("id", alias.instagram_account_id)
+      .eq("organization_id", alias.organization_id)
+      .maybeSingle();
+
+    if (accountError) {
+      return { account: null, error: accountError.code ?? "account_lookup_failed" };
+    }
+
+    return { account: account ?? null, error: null };
+  }
+
+  // Compatibilidade durante deploy/rollback: a coluna canônica antiga
+  // continua sendo uma fonte válida para o fluxo Instagram Login.
+  const { data: account, error: accountError } = await supabase
+    .from("instagram_accounts")
+    .select("id, organization_id, external_id")
+    .eq("external_id", webhookEntryId)
+    .maybeSingle();
+
+  if (accountError) {
+    return { account: null, error: accountError.code ?? "account_lookup_failed" };
+  }
+
+  return { account: account ?? null, error: null };
+}
+
 Deno.serve(async (req: Request) => {
-  const verifyToken = Deno.env.get("META_VERIFY_TOKEN");
-  const appSecret = Deno.env.get("META_APP_SECRET");
+  const verifyTokens = configuredValues(
+    "META_VERIFY_TOKEN",
+    "META_UNIFIED_VERIFY_TOKEN",
+  );
+  const appSecrets = configuredValues(
+    "META_APP_SECRET",
+    "META_UNIFIED_APP_SECRET",
+  );
 
   if (req.method === "GET") {
-    if (!verifyToken) return new Response("Webhook verify token not configured", { status: 503 });
+    if (verifyTokens.length === 0) {
+      return new Response("Webhook verify token not configured", { status: 503 });
+    }
 
     const url = new URL(req.url);
     const mode = url.searchParams.get("hub.mode");
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
-    if (mode === "subscribe" && token === verifyToken && challenge) {
+    if (mode === "subscribe" && token && verifyTokens.includes(token) && challenge) {
       return new Response(challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
     }
 
@@ -86,11 +151,16 @@ Deno.serve(async (req: Request) => {
     return new Response("Method Not Allowed", { status: 405, headers: { Allow: "GET, POST" } });
   }
 
-  if (!appSecret) return new Response("Webhook app secret not configured", { status: 503 });
+  if (appSecrets.length === 0) {
+    return new Response("Webhook app secret not configured", { status: 503 });
+  }
 
   const rawBody = await req.text();
   const signature = req.headers.get("x-hub-signature-256") ?? "";
-  const authentic = await verifyMetaSignature(rawBody, signature, appSecret);
+  const signatureChecks = await Promise.all(
+    appSecrets.map((secret) => verifyMetaSignature(rawBody, signature, secret)),
+  );
+  const authentic = signatureChecks.some(Boolean);
   if (!authentic) return new Response("Invalid signature", { status: 401 });
 
   let body: any;
@@ -115,14 +185,13 @@ Deno.serve(async (req: Request) => {
     const igExternalId = entry?.id != null ? String(entry.id) : null;
     if (!igExternalId) continue;
 
-    const { data: account, error: accountError } = await supabase
-      .from("instagram_accounts")
-      .select("id, organization_id")
-      .eq("external_id", igExternalId)
-      .maybeSingle();
+    const { account, error: accountError } = await resolveInstagramAccount(
+      supabase,
+      igExternalId,
+    );
 
     if (accountError) {
-      console.error("instagram_accounts lookup failed", accountError.code);
+      console.error("Instagram account identifier lookup failed", accountError);
       return new Response("Temporary persistence error", { status: 500 });
     }
 
@@ -135,7 +204,12 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      const idempotencyKey = `meta:instagram:${change.field}:${igExternalId}:${commentId}`;
+      // Uma vez mapeado, usa o ID canônico legado para manter a mesma chave
+      // do importador histórico e deduplicar eventos recebidos pelos dois
+      // modos de autenticação durante o canário do Unified Login.
+      const canonicalAccountId = account?.external_id ?? igExternalId;
+      const idempotencyKey =
+        `meta:instagram:${change.field}:${canonicalAccountId}:${commentId}`;
 
       let eventId: string | null = null;
       let eventStatus: string | null = null;
@@ -151,7 +225,8 @@ Deno.serve(async (req: Request) => {
           external_object_id: commentId,
           idempotency_key: idempotencyKey,
           payload: body,
-          status: "received",
+          status: account ? "received" : "dead_letter",
+          last_error: account ? null : "instagram_account_mapping_missing",
         })
         .select("id, status")
         .single();
@@ -159,7 +234,7 @@ Deno.serve(async (req: Request) => {
       if (insertError?.code === "23505") {
         const { data: existingEvent, error: lookupError } = await supabase
           .from("webhook_events")
-          .select("id, status")
+          .select("id, status, organization_id, instagram_account_id")
           .eq("idempotency_key", idempotencyKey)
           .single();
 
@@ -170,6 +245,32 @@ Deno.serve(async (req: Request) => {
 
         eventId = existingEvent.id;
         eventStatus = existingEvent.status;
+
+        // Um retry posterior pode reparar um evento que chegou antes do
+        // cadastro do alias. A atualização é segura porque a chave continua
+        // idempotente e a FK composta protege o tenant.
+        if (
+          account &&
+          (!existingEvent.organization_id || !existingEvent.instagram_account_id)
+        ) {
+          const { error: repairError } = await supabase
+            .from("webhook_events")
+            .update({
+              organization_id: account.organization_id,
+              instagram_account_id: account.id,
+              status: "received",
+              last_error: null,
+            })
+            .eq("id", eventId)
+            .eq("status", "dead_letter");
+
+          if (repairError) {
+            console.error("webhook_events mapping repair failed", repairError.code);
+            return new Response("Temporary persistence error", { status: 500 });
+          }
+
+          eventStatus = "received";
+        }
       } else if (insertError) {
         console.error("webhook_events insert failed", insertError.code);
         return new Response("Temporary persistence error", { status: 500 });
@@ -179,7 +280,10 @@ Deno.serve(async (req: Request) => {
       }
 
       if (!account || !eventId) {
-        console.warn("Webhook event persisted without a mapped Instagram account", igExternalId);
+        console.warn(
+          "Webhook event moved to dead letter: Instagram account mapping missing",
+          igExternalId,
+        );
         continue;
       }
 

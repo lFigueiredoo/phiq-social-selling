@@ -6,18 +6,18 @@ recebe webhooks assinados, persiste eventos idempotentes, classifica o contexto
 com regras determinísticas/IA, conduz o lead pelos funis e mantém qualquer ação
 de saída sob política e aprovação.
 
-## Estado validado em 29/10/2026
+## Estado validado em 23/11/2026
 
 O ambiente local está executável e foi validado com:
 
-- 34 migrations aplicadas do zero em PostgreSQL 17;
+- 35 migrations aplicadas do zero em PostgreSQL 17;
 - 21 Edge Functions versionadas;
-- 9 contratos SQL/pgTAP, 2 testes de concorrência e 1 teste HTTP integrado;
-- 35 testes Node de contrato e 48 testes Python do coletor;
+- 10 contratos SQL/pgTAP, 2 testes de concorrência e 1 teste HTTP integrado;
+- 40 testes Node de contrato e 48 testes Python do coletor;
 - build TypeScript/Vite, lint e `npm audit` de produção sem falhas;
 - frontend dividido por rota, sem o bundle monolítico anterior.
 
-O Supabase remoto foi alinhado às 34 migrations e às funções
+O Supabase remoto foi alinhado às 35 migrations e às funções
 versionadas, com backup anterior ao deploy e testes negativos de autenticação.
 O painel CRM foi publicado em
 [`phiq-social-selling-panel.vercel.app`](https://phiq-social-selling-panel.vercel.app/)
@@ -28,9 +28,14 @@ O worker publicado classifica e atualiza o CRM. A versão com geração de
 rascunhos Gemini está validada no repositório, mas sua promoção no n8n ainda
 precisa substituir o rascunho duplicado criado pelo import incremental. Uma
 auditoria do banco confirmou 12 envios antigos (o último em 15/09/2026) e
-nenhum envio em 29/10/2026. O dispatcher foi novamente implantado e está
-bloqueado em produção por `INSTAGRAM_DISPATCH_DRY_RUN=true`.
-Veja o estado atual em
+nenhum envio em 29/10/2026. Em 23/11/2026, o token Meta de
+`@phiq.oficial` foi renovado e o painel voltou a ler mídias e contagens reais.
+O código e o banco agora suportam coexistência segura entre o Instagram Login
+atual e um futuro Unified Login, com tokens separados, aliases explícitos de ID
+e dead letter para webhook sem mapeamento. O modo ativo continua sendo
+`instagram_login` e o dispatcher permanece bloqueado em produção por
+`INSTAGRAM_DISPATCH_DRY_RUN=true`.
+Veja [`docs/meta-setup.md`](docs/meta-setup.md) e o último inventário completo em
 [`docs/audit-2026-10-29.md`](docs/audit-2026-10-29.md).
 
 ## Arquitetura

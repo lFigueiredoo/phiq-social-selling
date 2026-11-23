@@ -1,5 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  getMetaRuntime,
+  MetaConfigurationError,
+  metaUrl,
+} from "../_shared/meta.ts";
 
 function getAdminKey(): string {
   const modern = Deno.env.get("SUPABASE_SECRET_KEYS");
@@ -135,19 +140,27 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const accessToken = Deno.env.get("META_ACCESS_TOKEN");
-  if (!accessToken) {
-    return Response.json({ ok: false, error: "meta_access_token_missing" }, { status: 503 });
+  let meta;
+  try {
+    meta = getMetaRuntime();
+  } catch (err) {
+    const code = err instanceof MetaConfigurationError
+      ? err.code
+      : "meta_configuration_error";
+    return Response.json({ ok: false, error: code }, { status: 503 });
   }
 
-  const apiVersion = (Deno.env.get("META_API_VERSION") || "v26.0").trim();
-  const url = `https://graph.instagram.com/${encodeURIComponent(apiVersion)}/${encodeURIComponent(action.target_comment_id)}?fields=id,timestamp`;
+  const url = metaUrl(
+    meta,
+    encodeURIComponent(action.target_comment_id),
+    new URLSearchParams({ fields: "id,timestamp" }),
+  );
 
   let metaResponse: Response;
   try {
     metaResponse = await fetch(url, {
       method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${meta.accessToken}` },
     });
   } catch (e) {
     console.error("meta policy fetch failed", String(e));
@@ -191,7 +204,8 @@ Deno.serve(async (req: Request) => {
       {
         source: "meta_comment_lookup",
         rule_version: "ig-meta-policy-v1",
-        api_version: apiVersion,
+        api_version: meta.apiVersion,
+        auth_mode: meta.authMode,
         comment_id: action.target_comment_id,
         checked_at: new Date(nowMs).toISOString(),
       },

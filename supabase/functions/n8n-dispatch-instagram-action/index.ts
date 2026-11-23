@@ -1,5 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  getMetaRuntime,
+  MetaConfigurationError,
+  type MetaRuntime,
+  metaUrl,
+  resolveMetaApiUserId,
+} from "../_shared/meta.ts";
 
 function getAdminKey(): string {
   const modern = Deno.env.get("SUPABASE_SECRET_KEYS");
@@ -19,11 +26,6 @@ function constantTimeEqual(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
-}
-
-function normalizeVersion(v: string): string {
-  const trimmed = v.trim();
-  return /^v\d+\.\d+$/.test(trimmed) ? trimmed : "v26.0";
 }
 
 function dispatchDryRunEnabled(): boolean {
@@ -99,17 +101,17 @@ type RepliesLookupResult =
 
 async function fetchVerifiedReplies(
   commentId: string,
-  apiVersion: string,
-  accessToken: string,
+  meta: MetaRuntime,
 ): Promise<RepliesLookupResult> {
   const params = new URLSearchParams({
     fields: "id",
     limit: "50",
   });
-  const endpoint =
-    `https://graph.instagram.com/${apiVersion}/` +
-    `${encodeURIComponent(commentId)}/replies?` +
-    params.toString();
+  const endpoint = metaUrl(
+    meta,
+    `${encodeURIComponent(commentId)}/replies`,
+    params,
+  );
 
   let response: Response;
 
@@ -117,7 +119,7 @@ async function fetchVerifiedReplies(
     response = await fetch(endpoint, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${meta.accessToken}`,
       },
       signal: AbortSignal.timeout(10000),
     });
@@ -203,10 +205,18 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const accessToken = Deno.env.get("META_ACCESS_TOKEN");
-  const apiVersion = normalizeVersion(Deno.env.get("META_API_VERSION") ?? "v26.0");
-  if (!supabaseUrl || !accessToken) {
+  if (!supabaseUrl) {
     return Response.json({ ok: false, error: "server_misconfigured" }, { status: 503 });
+  }
+
+  let meta: MetaRuntime;
+  try {
+    meta = getMetaRuntime();
+  } catch (err) {
+    const code = err instanceof MetaConfigurationError
+      ? err.code
+      : "meta_configuration_error";
+    return Response.json({ ok: false, error: code }, { status: 503 });
   }
 
   const supabase = createClient(supabaseUrl, getAdminKey(), { auth: { persistSession: false, autoRefreshToken: false } });
@@ -234,14 +244,33 @@ Deno.serve(async (req: Request) => {
   }
 
   const action = claimData[0];
-  const igUserId = action.instagram_account_external_id;
-  if (!igUserId) {
+  const canonicalInstagramAccountId = action.instagram_account_external_id;
+  if (!canonicalInstagramAccountId) {
     await supabase.rpc("mark_outbound_action_dispatch_error", {
       p_action_id: actionId,
       p_error: "instagram_account_external_id_missing",
       p_uncertain: false,
     });
     return Response.json({ ok: false, error: "instagram_account_missing" }, { status: 500 });
+  }
+
+  let igUserId: string;
+  try {
+    igUserId = await resolveMetaApiUserId(
+      supabase,
+      meta,
+      { external_id: canonicalInstagramAccountId },
+    );
+  } catch (err) {
+    const code = err instanceof MetaConfigurationError
+      ? err.code
+      : "meta_configuration_error";
+    await supabase.rpc("mark_outbound_action_dispatch_error", {
+      p_action_id: actionId,
+      p_error: code,
+      p_uncertain: false,
+    });
+    return Response.json({ ok: false, error: code }, { status: 503 });
   }
 
   /*
@@ -265,10 +294,11 @@ Deno.serve(async (req: Request) => {
       fields: "id,replies.limit(50){id}",
     });
 
-    const preflightUrl =
-      `https://graph.instagram.com/${apiVersion}/` +
-      `${encodeURIComponent(action.target_comment_id)}?` +
-      preflightParams.toString();
+    const preflightUrl = metaUrl(
+      meta,
+      encodeURIComponent(action.target_comment_id),
+      preflightParams,
+    );
 
     let preflightResponse: Response;
 
@@ -276,7 +306,7 @@ Deno.serve(async (req: Request) => {
       preflightResponse = await fetch(preflightUrl, {
         method: "GET",
         headers: {
-          "Authorization": `Bearer ${accessToken}`,
+          "Authorization": `Bearer ${meta.accessToken}`,
         },
         signal: AbortSignal.timeout(10000),
       });
@@ -369,8 +399,7 @@ Deno.serve(async (req: Request) => {
     if (!verifiedReplies) {
       const repliesLookup = await fetchVerifiedReplies(
         action.target_comment_id,
-        apiVersion,
-        accessToken,
+        meta,
       );
 
       if (!repliesLookup.ok) {
@@ -458,10 +487,11 @@ Deno.serve(async (req: Request) => {
             fields: "id,from",
           });
 
-          const replyUrl =
-            `https://graph.instagram.com/${apiVersion}/` +
-            `${encodeURIComponent(replyId)}?` +
-            replyParams.toString();
+          const replyUrl = metaUrl(
+            meta,
+            encodeURIComponent(replyId),
+            replyParams,
+          );
 
           let replyResponse: Response;
 
@@ -469,7 +499,7 @@ Deno.serve(async (req: Request) => {
             replyResponse = await fetch(replyUrl, {
               method: "GET",
               headers: {
-                "Authorization": `Bearer ${accessToken}`,
+                "Authorization": `Bearer ${meta.accessToken}`,
               },
               signal: AbortSignal.timeout(10000),
             });
@@ -654,13 +684,16 @@ Deno.serve(async (req: Request) => {
   let url = "";
   let payload: Record<string, unknown>;
   if (action.action_type === "private_reply") {
-    url = `https://graph.instagram.com/${apiVersion}/${encodeURIComponent(igUserId)}/messages`;
+    url = metaUrl(meta, `${encodeURIComponent(igUserId)}/messages`);
     payload = {
       recipient: { comment_id: action.target_comment_id },
       message: { text: action.message_text },
     };
   } else if (action.action_type === "public_reply") {
-    url = `https://graph.instagram.com/${apiVersion}/${encodeURIComponent(action.target_comment_id)}/replies`;
+    url = metaUrl(
+      meta,
+      `${encodeURIComponent(action.target_comment_id)}/replies`,
+    );
     payload = { message: action.message_text };
   } else {
     await supabase.rpc("mark_outbound_action_dispatch_error", {
@@ -676,7 +709,7 @@ Deno.serve(async (req: Request) => {
     metaResponse = await fetch(url, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${accessToken}`,
+        "Authorization": `Bearer ${meta.accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),

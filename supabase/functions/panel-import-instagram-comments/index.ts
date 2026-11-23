@@ -26,6 +26,13 @@ import {
   requireUuid,
   toHttpError,
 } from "../_shared/auth.ts";
+import {
+  getMetaRuntime,
+  MetaConfigurationError,
+  type MetaRuntime,
+  metaUrl,
+  resolveMetaApiUserId,
+} from "../_shared/meta.ts";
 
 // O job é criado atomicamente pela RPC no banco.
 const MAX_LIMIT = 25;
@@ -90,17 +97,17 @@ function verifyRepliesPayload(value: unknown): VerifiedReplies | null {
 
 async function fetchVerifiedReplies(
   commentId: string,
-  apiVersion: string,
-  accessToken: string,
+  meta: MetaRuntime,
 ): Promise<VerifiedReplies | null> {
   const params = new URLSearchParams({
     fields: "id",
     limit: "50",
   });
-  const endpoint =
-    `https://graph.instagram.com/${apiVersion}/` +
-    `${encodeURIComponent(commentId)}/replies?` +
-    params.toString();
+  const endpoint = metaUrl(
+    meta,
+    `${encodeURIComponent(commentId)}/replies`,
+    params,
+  );
 
   let response: Response;
 
@@ -108,7 +115,7 @@ async function fetchVerifiedReplies(
     response = await fetch(endpoint, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${meta.accessToken}`,
       },
       signal: AbortSignal.timeout(15000),
     });
@@ -150,11 +157,6 @@ async function fetchVerifiedReplies(
   }
 
   return verifiedReplies;
-}
-
-function normalizeVersion(value: string): string {
-  const version = value.trim();
-  return /^v\d+\.\d+$/.test(version) ? version : "v26.0";
 }
 
 function requireMediaId(value: unknown): string {
@@ -319,19 +321,22 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const accessToken = Deno.env.get("META_ACCESS_TOKEN");
+    let meta: MetaRuntime;
+    let accountApiUserId: string;
 
-    if (!accessToken) {
-      return json(
-        req,
-        { ok: false, error: "meta_access_token_missing" },
-        503,
+    try {
+      meta = getMetaRuntime();
+      accountApiUserId = await resolveMetaApiUserId(
+        supabase,
+        meta,
+        account,
       );
+    } catch (err) {
+      const code = err instanceof MetaConfigurationError
+        ? err.code
+        : "meta_configuration_error";
+      return json(req, { ok: false, error: code }, 503);
     }
-
-    const apiVersion = normalizeVersion(
-      Deno.env.get("META_API_VERSION") ?? "v26.0",
-    );
 
     /*
      * Validação forte de identidade e ownership.
@@ -341,18 +346,24 @@ Deno.serve(async (req: Request) => {
      * podem pertencer a namespaces/escopos diferentes.
      *
      * A mídia só pode ser importada quando:
-     * - o token representa o username configurado para a organização;
-     * - media.owner.id é exatamente o /me.id do token;
+     * - o token acessa o usuário de API configurado para a organização;
+     * - media.owner.id é exatamente esse usuário de API;
      * - media.username também corresponde à conta conectada.
      */
-    const identityEndpoint =
-      `https://graph.instagram.com/${apiVersion}/me` +
-      "?fields=id,username";
+    const identityPath = meta.authMode === "unified_login"
+      ? encodeURIComponent(accountApiUserId)
+      : "me";
+    const identityEndpoint = metaUrl(
+      meta,
+      identityPath,
+      new URLSearchParams({ fields: "id,username" }),
+    );
 
-    const mediaEndpoint =
-      `https://graph.instagram.com/${apiVersion}/` +
-      `${encodeURIComponent(mediaId)}` +
-      "?fields=id,owner,username,permalink";
+    const mediaEndpoint = metaUrl(
+      meta,
+      encodeURIComponent(mediaId),
+      new URLSearchParams({ fields: "id,owner,username,permalink" }),
+    );
 
     let identityResponse: Response;
     let mediaResponse: Response;
@@ -362,14 +373,14 @@ Deno.serve(async (req: Request) => {
         fetch(identityEndpoint, {
           method: "GET",
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${meta.accessToken}`,
           },
           signal: AbortSignal.timeout(15000),
         }),
         fetch(mediaEndpoint, {
           method: "GET",
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${meta.accessToken}`,
           },
           signal: AbortSignal.timeout(15000),
         }),
@@ -476,7 +487,7 @@ Deno.serve(async (req: Request) => {
       configuredUsername.toLowerCase()
     ) {
       console.error(
-        "Connected Instagram account does not match META_ACCESS_TOKEN",
+        "Connected Instagram account does not match the configured Meta token",
       );
 
       return json(
@@ -522,10 +533,11 @@ Deno.serve(async (req: Request) => {
       params.set("after", after);
     }
 
-    const endpoint =
-      `https://graph.instagram.com/${apiVersion}/` +
-      `${encodeURIComponent(mediaId)}/comments?` +
-      params.toString();
+    const endpoint = metaUrl(
+      meta,
+      `${encodeURIComponent(mediaId)}/comments`,
+      params,
+    );
 
     let metaResponse: Response;
 
@@ -533,7 +545,7 @@ Deno.serve(async (req: Request) => {
       metaResponse = await fetch(endpoint, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${meta.accessToken}`,
         },
         signal: AbortSignal.timeout(15000),
       });
@@ -651,8 +663,7 @@ Deno.serve(async (req: Request) => {
       if (!verifiedReplies) {
         verifiedReplies = await fetchVerifiedReplies(
           commentId,
-          apiVersion,
-          accessToken,
+          meta,
         );
 
         if (!verifiedReplies) {
@@ -686,10 +697,11 @@ Deno.serve(async (req: Request) => {
 
         replyAuthorLookups++;
 
-        const replyEndpoint =
-          `https://graph.instagram.com/${apiVersion}/` +
-          `${encodeURIComponent(replyId)}` +
-          "?fields=id,from";
+        const replyEndpoint = metaUrl(
+          meta,
+          encodeURIComponent(replyId),
+          new URLSearchParams({ fields: "id,from" }),
+        );
 
         let replyResponse: Response;
 
@@ -697,7 +709,7 @@ Deno.serve(async (req: Request) => {
           replyResponse = await fetch(replyEndpoint, {
             method: "GET",
             headers: {
-              Authorization: `Bearer ${accessToken}`,
+              Authorization: `Bearer ${meta.accessToken}`,
             },
             signal: AbortSignal.timeout(15000),
           });
@@ -751,7 +763,7 @@ Deno.serve(async (req: Request) => {
          */
         const ownReplyById =
           replyFromId !== "" &&
-          replyFromId === String(account.external_id);
+          replyFromId === accountApiUserId;
 
         const ownReplyByUsername =
           replyFromUsername !== "" &&

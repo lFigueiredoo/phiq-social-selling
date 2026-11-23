@@ -23,11 +23,12 @@ import {
   requireUuid,
   toHttpError,
 } from "../_shared/auth.ts";
-
-function normalizeVersion(value: string): string {
-  const version = value.trim();
-  return /^v\d+\.\d+$/.test(version) ? version : "v26.0";
-}
+import {
+  getMetaRuntime,
+  MetaConfigurationError,
+  metaUrl,
+  resolveMetaApiUserId,
+} from "../_shared/meta.ts";
 
 function parseLimit(value: string | null): number {
   if (!value) return 25;
@@ -161,19 +162,22 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const accessToken = Deno.env.get("META_ACCESS_TOKEN");
+    let meta;
+    let accountApiUserId: string;
 
-    if (!accessToken) {
-      return json(
-        req,
-        { ok: false, error: "meta_access_token_missing" },
-        503,
+    try {
+      meta = getMetaRuntime();
+      accountApiUserId = await resolveMetaApiUserId(
+        supabase,
+        meta,
+        account,
       );
+    } catch (err) {
+      const code = err instanceof MetaConfigurationError
+        ? err.code
+        : "meta_configuration_error";
+      return json(req, { ok: false, error: code }, 503);
     }
-
-    const apiVersion = normalizeVersion(
-      Deno.env.get("META_API_VERSION") ?? "v26.0",
-    );
 
     const params = new URLSearchParams({
       fields: [
@@ -193,10 +197,11 @@ Deno.serve(async (req: Request) => {
       params.set("after", after);
     }
 
-    const endpoint =
-      `https://graph.instagram.com/${apiVersion}/` +
-      `${encodeURIComponent(String(account.external_id))}/media?` +
-      params.toString();
+    const endpoint = metaUrl(
+      meta,
+      `${encodeURIComponent(accountApiUserId)}/media`,
+      params,
+    );
 
     let metaResponse: Response;
 
@@ -204,7 +209,7 @@ Deno.serve(async (req: Request) => {
       metaResponse = await fetch(endpoint, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${meta.accessToken}`,
         },
         signal: AbortSignal.timeout(15000),
       });

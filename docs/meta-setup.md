@@ -1,267 +1,138 @@
-# Configuração Meta / Instagram
+# Meta / Instagram — estado e runbook
 
-> **Revalidação obrigatória:** este arquivo nasceu como plano anterior à
-> implementação e ainda contém campos históricos `[A PREENCHER]`. Já existem
-> funções e secrets no Supabase remoto, mas a auditoria de 28/10/2026 não teve
-> acesso ao App Dashboard da Meta para confirmar scopes, versão, modo, App
-> Review, subscription ou validade do token. Não trate os estados “NÃO FEITO”
-> abaixo como inventário atual; veja [`audit-2026-10-28.md`](audit-2026-10-28.md).
+## Estado confirmado em 23/11/2026
 
-Este documento registra a decisão de integração com a Meta, os
-pré-requisitos e o estado da configuração do app.
+- App publicado: `PHIQ Social Selling DEV` (`2133910727524622`).
+- Instagram App ID exibido no fluxo atual: `2288236405324530`.
+- Conta profissional conectada: `@phiq.oficial`.
+- Integração ativa: **Instagram API with Instagram Login**.
+- Host ativo: `graph.instagram.com`.
+- Permissões ativas: `instagram_business_basic`,
+  `instagram_business_manage_comments` e
+  `instagram_business_manage_messages`.
+- O token foi renovado, validado contra `/me?fields=id,username` e salvo no
+  secret store do Supabase. O valor do token não pertence ao Git, banco,
+  documentação ou painel.
+- O painel leu publicações e contagens reais após a renovação.
+- O webhook está ativado no app atual.
+- O dispatcher permanece bloqueado por
+  `INSTAGRAM_DISPATCH_DRY_RUN=true`; a validação não enviou comentário nem DM.
 
-> **Status: PENDENTE DE EXECUÇÃO NO DASHBOARD DA META.**
-> A parte de decisão técnica e planejamento está fechada. A criação do
-> app em si precisa ser feita por uma pessoa com acesso ao Meta for
-> Developers e ao Business Portfolio da PHIQ — não é algo que eu possa
-> executar. Os campos marcados como `[A PREENCHER]` devem ser
-> completados conforme a configuração real for concluída.
+A interface da Meta classifica o fluxo atual como antigo, mas o fluxo segue
+funcionando e a Meta não publicou uma data de desligamento. Por isso, a
+migração para Unified Login deve ser paralela e reversível, não uma troca
+direta.
 
----
+Fontes oficiais:
 
-## 1. Decisão: Instagram API with Instagram Login
+- [Guia de migração para Unified Login](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/migration-guide/)
+- [Changelog da plataforma Instagram](https://developers.facebook.com/docs/instagram/platform/instagram-api/changelog/)
+- [System users e geração de tokens](https://developers.facebook.com/docs/business-management-apis/system-users/install-apps-and-generate-tokens/)
+- [Depuração de access tokens](https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging/)
 
-**Abordagem aprovada:** *Instagram API with Instagram Login* (também
-apresentada pela Meta como *Business Login for Instagram* ou, no fluxo
-de criação do app, como *API setup with Instagram login*).
+## Arquitetura de coexistência
 
-**Não usaremos como caminho principal:** *Instagram API with Facebook
-Login for Business*.
-
-### Por quê
-
-| Critério | Instagram Login (escolhido) | Facebook Login for Business |
-|---|---|---|
-| Facebook Page vinculada | **Não exigida** | Exigida |
-| Contas suportadas | Business e Creator | Business e Creator vinculadas a uma Page |
-| Host da API | `graph.instagram.com` | `graph.facebook.com` |
-| Scopes | Scopes modernos específicos do Instagram | Permissões no formato `instagram_*` via Page |
-
-A documentação da Meta confirma que <cite index="34-1">este setup de API não exige que uma Página do Facebook esteja vinculada à conta profissional do Instagram</cite>, e que ele permite <cite index="34-1">moderação de comentários (gerenciar e responder comentários nas mídias) e mensageria (enviar e receber mensagens com clientes ou pessoas interessadas na conta)</cite> — exatamente o escopo funcional do nosso MVP.
-
-Também vale registrar a limitação declarada pela Meta: <cite index="34-1">este setup de API não consegue acessar anúncios nem tagging</cite>. Nenhuma dessas capacidades faz parte do nosso escopo, então a limitação não nos afeta.
-
-**Consequência prática:** menos uma dependência (Facebook Page) e um
-caminho de OAuth mais direto para contas profissionais.
-
----
-
-## 2. Scopes
-
-### Scopes que usaremos
-
-| Scope | Uso no projeto | Fase |
-|---|---|---|
-| `instagram_business_basic` | Leitura de perfil e mídia | FASE 1 |
-| `instagram_business_manage_comments` | Ler, responder, ocultar comentários | FASE 1 |
-| `instagram_business_manage_messages` | Private replies e DMs | FASE 2 |
-
-### Scope que NÃO solicitaremos
-
-`instagram_business_content_publish` — o sistema não publica posts.
-Solicitar uma permissão sem necessidade só aumenta a superfície do App
-Review sem benefício.
-
-### Atenção aos scopes legados
-
-Os valores antigos `business_basic`, `business_content_publish`,
-`business_manage_comments` e `business_manage_messages` são
-**deprecated** e não devem ser usados. A Meta introduziu os novos
-valores <cite index="34-1">para garantir consistência entre os valores de scope e os nomes das permissões, substituindo os valores existentes business_basic, business_content_publish, business_manage_comments e business_manage_messages</cite>, e <cite index="34-1">os valores antigos foram descontinuados em 27 de janeiro de 2025, o que impede o app de chamar os endpoints do Instagram caso o código não seja atualizado</cite>.
-
-Ou seja: usar os nomes antigos hoje simplesmente quebra as chamadas.
-
----
-
-## 3. Versão da API
-
-**NÃO fixar por memória.** A versão a ser usada deve ser lida
-diretamente do App Dashboard no momento da criação do app, já que a Meta
-publica novas versões com regularidade e o dashboard indica qual é a
-padrão/recomendada para um app novo.
-
-- **Host da API:** `graph.instagram.com`
-- **Versão identificada no dashboard:** `[A PREENCHER]`
-
-Fontes públicas de terceiros mencionam versões estáveis recentes, mas
-**isso não substitui a leitura do dashboard** — o valor autoritativo é o
-que a Meta apresentar para este app específico. Quando confirmado, o
-valor vai para a variável `META_API_VERSION` (nunca hardcoded no
-código).
-
----
-
-## 4. Meta App — dados de registro
-
-Preencher conforme a criação for concluída. **Nenhum secret aqui.**
-
-| Campo | Valor |
-|---|---|
-| Meta App Name | `PHIQ Social Selling DEV` (sugerido) |
-| Meta App ID | `[A PREENCHER]` |
-| Instagram App ID (se apresentado separadamente) | `[A PREENCHER]` |
-| App mode | `Development` (esperado neste estágio) |
-| API setup escolhido | API setup with Instagram login |
-| Business Portfolio associado | `[A PREENCHER]` |
-
-### Sobre App ID vs. Instagram App ID
-
-Dependendo da interface atual, a Meta pode apresentar um único App ID ou
-um App ID separado para o Instagram. **Se apenas um ID for aplicável ao
-nosso fluxo, registre isso aqui e não mantenha variáveis duplicadas** no
-`.env` — remover `META_INSTAGRAM_APP_ID` do `.env.example` nesse caso é
-o comportamento correto.
-
-Situação confirmada: `[A PREENCHER — um único ID / dois IDs distintos]`
-
----
-
-## 5. Business Portfolio
-
-Se a Meta solicitar associação a um Business Portfolio, usar o
-**portfólio empresarial oficial que administra a conta Instagram da
-PHIQ**.
-
-- Não criar empresa fictícia.
-- Não alterar ativos existentes sem necessidade.
-- **Se houver mais de um portfólio e não for possível determinar com
-  segurança qual é o correto: parar e escalar para decisão humana**,
-  listando os nomes disponíveis.
-
-Portfólio utilizado: `[A PREENCHER]`
-
----
-
-## 6. Conta Instagram de desenvolvimento
-
-Requisito: conta **Business** ou **Creator**. Conta pessoal não funciona
-com esta API.
-
-| Campo | Valor |
-|---|---|
-| Username | `[A PREENCHER]` |
-| Tipo de conta | `[A PREENCHER — Business / Creator]` |
-| Uso | `[A PREENCHER — conta de teste/dev ou conta oficial]` |
-
-**Nunca registrar aqui:** senha, código 2FA, token.
-
-### Preferência de conta
-
-Idealmente uma conta profissional que possa receber comentários de teste
-sem risco operacional. Se a única opção for a conta oficial da PHIQ:
-**preparar apenas a vinculação**, sem publicar, responder comentários ou
-enviar mensagens.
-
-**Neste PASSO 03A nenhuma interação real deve ser enviada.**
-
----
-
-## 7. Papéis e testers
-
-Enquanto o app estiver em Development Mode, apenas contas com papel
-atribuído no próprio app conseguem interagir com ele.
-
-| Papel | Conta/Pessoa | Necessário? |
-|---|---|---|
-| Admin | `[A PREENCHER]` | `[A PREENCHER]` |
-| Developer | `[A PREENCHER]` | `[A PREENCHER]` |
-| Tester / Instagram Tester | `[A PREENCHER]` | `[A PREENCHER]` |
-
-Regras: não adicionar usuários desconhecidos; não conceder acesso
-administrativo desnecessário; documentar exatamente qual papel foi
-efetivamente necessário (a interface da Meta varia).
-
----
-
-## 8. Access Level
-
-O dashboard distingue níveis de acesso (tipicamente apresentados como
-*Standard Access* e *Advanced Access*, mas os nomes podem mudar).
-
-**Neste estágio não solicitar App Review.** Trabalharemos com admins,
-developers, testers e contas autorizadas no próprio app. O App Review só
-será tratado depois que o fluxo técnico estiver funcionando de ponta a
-ponta.
-
-Nível observado no dashboard: `[A PREENCHER]`
-
----
-
-## 9. Webhooks
-
-**Neste passo, apenas confirmar que a seção de Webhooks existe no App
-Dashboard.** Nada é configurado agora.
-
-- Seção de Webhooks disponível no dashboard: `[A PREENCHER — SIM/NÃO]`
-- Webhook configurado: **NÃO** (por decisão, não por pendência)
-
-Não criar URL fictícia, não usar `webhook.site` como solução
-permanente, e **não apontar a Meta diretamente para o n8n**. A
-arquitetura aprovada continua sendo:
-
-```
-Meta → Supabase Edge Function → banco/fila → n8n
+```text
+Instagram Login (ativo)       Unified Login (candidato)
+graph.instagram.com           graph.facebook.com
+META_ACCESS_TOKEN             META_UNIFIED_ACCESS_TOKEN
+META_APP_SECRET               META_UNIFIED_APP_SECRET
+META_VERIFY_TOKEN             META_UNIFIED_VERIFY_TOKEN
+          \                    /
+           meta-instagram-webhook
+                    |
+       instagram_account_identifiers
+                    |
+           conta canônica / CRM
 ```
 
-A URL real do webhook será criada no **PASSO 05**.
+`META_AUTH_MODE` aceita somente:
 
----
+- `instagram_login` — padrão e modo de produção atual;
+- `unified_login` — exige token próprio e um alias primário
+  `api_user_id`; se faltar qualquer um deles, as funções falham fechado.
 
-## 10. Secrets
+O webhook aceita, durante o canário, assinaturas e verify tokens dos dois
+apps. O `entry.id` é resolvido por um alias `webhook_entry_id`. Eventos
+assinados sem mapeamento não desaparecem: ficam em `webhook_events` com
+status `dead_letter` e erro `instagram_account_mapping_missing`, sem job e sem
+envio.
 
-O dashboard apresentará algum conjunto de: App ID, Instagram App ID,
-App Secret, Instagram App Secret (os nomes variam conforme a interface).
+## Por que os IDs não podem ser presumidos
 
-**Regras:**
-- IDs públicos podem ser registrados neste documento.
-- **App Secret / Instagram App Secret são segredos.** Nunca em README,
-  `docs/`, Git, migrations, mensagens ou screenshots versionados.
-- O secret vai para o gerenciador de secrets / `.env` local (já
-  ignorado pelo Git), nunca para o repositório.
+A Meta pode apresentar IDs diferentes para:
 
-App Secret configurado/guardado com segurança: `[A PREENCHER — SIM/NÃO]`
+- usuário retornado pelo token;
+- usuário usado nas chamadas Graph;
+- `entry.id` recebido no webhook;
+- ID exibido na interface do App Dashboard.
 
----
+O banco mantém esses namespaces em `instagram_account_identifiers`, ligados à
+mesma linha de `instagram_accounts`. Nunca copie um ID para outro campo por
+semelhança visual. Cada valor deve ser observado no endpoint ou webhook que o
+define.
 
-## 11. Pendências
+## Permissões mínimas do Unified Login
 
-### Para o PASSO 04 (OAuth / token)
-- Configurar o redirect URI de OAuth.
-- Executar o fluxo de autorização com a conta de teste.
-- Trocar authorization code por access token.
-- Gerar long-lived token e definir estratégia de renovação
-  (`token_expires_at` já existe em `instagram_accounts`; o token em si
-  fica em secrets, nunca no banco).
+Solicitar somente:
 
-**Nada disso foi feito no PASSO 03A** — nenhum token foi gerado,
-trocado ou armazenado.
+- `instagram_basic`;
+- `instagram_manage_comments`;
+- `instagram_manage_messages`.
 
-### Para o PASSO 05 (webhook)
-- Criar a Supabase Edge Function receptora.
-- Definir a URL pública e o `META_VERIFY_TOKEN`.
-- Registrar a subscription de webhook (`comments` primeiro).
+Remover `ads_management`, `ads_read` e `instagram_content_publish` quando a
+interface os incluir por padrão. O produto não gerencia anúncios nem publica
+posts.
 
-### Para o futuro (App Review)
-- `instagram_business_manage_comments` e
-  `instagram_business_manage_messages` exigem Advanced Access via App
-  Review, com gravação de tela demonstrando o caso de uso real,
-  política de privacidade publicada e Business Verification.
-- Recomendação: iniciar esse processo **em paralelo** ao
-  desenvolvimento, já que costuma ser o item de maior prazo do
-  cronograma — mas só depois que o fluxo técnico estiver funcionando em
-  Development Mode.
+## Migração segura para Unified Login
 
----
+1. Criar uma configuração Unified Login no mesmo Business Portfolio oficial.
+2. Gerar um System User Access Token separado. Não substituir
+   `META_ACCESS_TOKEN`.
+3. Consultar `/me/assigned_instagram_accounts` e registrar o `user_id` correto
+   como alias `unified_login/api_user_id`.
+4. Configurar o callback no objeto Instagram do app Meta.
+5. Assinar a conta via `/{ig-user-id}/subscribed_apps` e registrar o ID que
+   realmente chegar em `entry.id` como
+   `unified_login/webhook_entry_id`.
+6. Validar leitura de perfil, mídia e comentários com
+   `graph.facebook.com`, ainda com o modo ativo legado.
+7. Produzir um comentário de teste autorizado e confirmar exatamente um
+   evento, um job e uma entrada no CRM.
+8. Mudar `META_AUTH_MODE=unified_login` apenas para o canário de leitura.
+9. Manter `INSTAGRAM_DISPATCH_DRY_RUN=true` durante toda a migração.
+10. Desativar token/subscription legados somente depois de estabilidade e
+    rollback testado.
 
-## 12. O que NÃO foi feito neste passo
+O envio real é uma decisão independente. A migração de autenticação não
+autoriza responder comentários nem iniciar Direct.
 
-Registro explícito, para evitar ambiguidade futura:
+## Rollback
 
-- Nenhuma Edge Function criada.
-- Nenhum OAuth callback configurado.
-- Nenhum token gerado ou armazenado.
-- Nenhum comentário respondido, nenhuma DM enviada.
-- Nenhum webhook real configurado.
-- Nenhuma conexão com n8n ou provider de IA.
-- Nenhuma tabela criada, nenhuma alteração no Supabase.
-- Nenhum App Review iniciado.
+1. Restaurar `META_AUTH_MODE=instagram_login`.
+2. Manter os aliases Unified para auditoria, marcando-os como `inactive` apenas
+   se estiverem incorretos.
+3. Confirmar leitura de mídia pelo painel.
+4. Confirmar recepção de um webhook legado.
+5. Não alterar `INSTAGRAM_DISPATCH_DRY_RUN` durante o rollback.
+
+## Rotação e monitoramento
+
+- Tokens e app secrets ficam somente no secret store do Supabase/Meta.
+- Preferir token de system user com expiração e rotação planejada; registrar
+  apenas o metadado de expiração.
+- Alertar para `401/403` da Meta, crescimento de `dead_letter`, ausência de
+  webhooks e divergência de username.
+- Um aumento de `instagram_account_mapping_missing` bloqueia o canário até que
+  o namespace correto seja identificado.
+- Nunca registrar tokens completos em logs, screenshots ou tickets.
+
+## Regra operacional de saída
+
+- Rascunhos podem ser gerados pelo Gemini conectado ao n8n.
+- Aprovação humana continua obrigatória.
+- Comentários históricos permitem somente resposta pública.
+- Private Reply/DM exige política elegível e janela válida.
+- `INSTAGRAM_DISPATCH_DRY_RUN=false` só pode ser aplicado para um teste real
+  controlado, com aprovação explícita e plano imediato de retorno ao modo
+  seguro.

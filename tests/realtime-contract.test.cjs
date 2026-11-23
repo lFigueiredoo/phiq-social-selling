@@ -9,8 +9,9 @@ const { webcrypto } = require('node:crypto');
 const root = path.join(__dirname, '..');
 const events = new Map();
 const jobs = new Map();
+const identifiers = [];
 let nextId = 0;
-const state = { events, jobs };
+const state = { events, jobs, identifiers };
 
 function query(table) {
   const filters = [];
@@ -28,7 +29,9 @@ function query(table) {
   function execute(one) {
     const rows = table === 'instagram_accounts'
       ? [{ id: 'account-1', organization_id: 'org-1', external_id: 'ig-1' }]
-      : [...(table === 'webhook_events' ? events : jobs).values()];
+      : table === 'instagram_account_identifiers'
+        ? identifiers
+        : [...(table === 'webhook_events' ? events : jobs).values()];
     if (inserted) {
       const store = table === 'webhook_events' ? events : jobs;
       const key = table === 'webhook_events' ? inserted.idempotency_key : inserted.webhook_event_id + ':' + inserted.job_type;
@@ -73,12 +76,12 @@ function loadHandler(name, env) {
   return handler;
 }
 
-function reset() { events.clear(); jobs.clear(); nextId = 0; }
+function reset() { events.clear(); jobs.clear(); identifiers.length = 0; nextId = 0; }
 function claim(handler, secret, worker = 'worker-a') {
   return handler(new Request('http://local', { method: 'POST', headers: secret ? { 'x-worker-secret': secret } : {}, body: JSON.stringify({ worker_id: worker }) }));
 }
-async function webhook(handler, commentId = 'comment-1') {
-  const body = JSON.stringify({ object: 'instagram', entry: [{ id: 'ig-1', changes: [{
+async function webhook(handler, commentId = 'comment-1', entryId = 'ig-1') {
+  const body = JSON.stringify({ object: 'instagram', entry: [{ id: entryId, changes: [{
     field: 'comments', value: { id: commentId, text: 'Quero abrir uma franquia',
       from: { id: 'person-1', username: 'cliente.teste', name: 'Cliente Teste' },
       media: { id: 'media-1', media_product_type: 'FEED' } },
@@ -131,6 +134,50 @@ test('signed realtime webhook queues once and two workers cannot claim the same 
     metadata: { media_product_type: 'FEED' },
   });
   assert.equal(second.job, null);
+});
+
+test('webhook resolves a Unified Login entry alias to the canonical account', async () => {
+  reset();
+  identifiers.push({
+    instagram_account_id: 'account-1',
+    organization_id: 'org-1',
+    auth_mode: 'unified_login',
+    identifier_type: 'webhook_entry_id',
+    external_id: 'unified-entry-1',
+    status: 'active',
+  });
+  const ingress = loadHandler('meta-instagram-webhook', {
+    META_UNIFIED_APP_SECRET: 'meta-test',
+    SUPABASE_URL: 'http://local',
+    SUPABASE_SERVICE_ROLE_KEY: 'local-key',
+  });
+
+  assert.equal((await webhook(ingress, 'comment-unified', 'unified-entry-1')).status, 200);
+  assert.equal(events.size, 1);
+  assert.equal(jobs.size, 1);
+  const event = [...events.values()][0];
+  assert.equal(event.idempotency_key, 'meta:instagram:comments:ig-1:comment-unified');
+  assert.equal(event.instagram_account_id, 'account-1');
+  assert.equal(event.organization_id, 'org-1');
+  assert.equal(event.status, 'queued');
+});
+
+test('signed webhook without an account mapping is explicit dead letter and never queues', async () => {
+  reset();
+  const ingress = loadHandler('meta-instagram-webhook', {
+    META_APP_SECRET: 'meta-test',
+    SUPABASE_URL: 'http://local',
+    SUPABASE_SERVICE_ROLE_KEY: 'local-key',
+  });
+
+  assert.equal((await webhook(ingress, 'comment-unmapped', 'unknown-entry')).status, 200);
+  assert.equal(events.size, 1);
+  assert.equal(jobs.size, 0);
+  const event = [...events.values()][0];
+  assert.equal(event.status, 'dead_letter');
+  assert.equal(event.last_error, 'instagram_account_mapping_missing');
+  assert.equal(event.instagram_account_id, null);
+  assert.equal(event.organization_id, null);
 });
 
 test('historical import keeps the same identity and atomic insert contract', () => {
