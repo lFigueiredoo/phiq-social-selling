@@ -38,6 +38,7 @@ Variáveis mínimas por fluxo:
 | Worker/classificação | `N8N_WORKER_SECRET` |
 | Gemini para casos não determinísticos | credencial criptografada `Google Gemini(PaLM) Api account` no n8n |
 | Política/dispatch Meta | `META_ACCESS_TOKEN`, `META_API_VERSION` |
+| Continuidade de Direct | `INSTAGRAM_CONVERSATION_DISPATCH_ENABLED` (manter `false` até homologação) |
 | Painel no navegador | `PANEL_ALLOWED_ORIGINS` |
 
 Use `INSTAGRAM_DISPATCH_DRY_RUN=true` nos testes locais. Nunca reutilize o
@@ -93,7 +94,7 @@ O coletor experimental possui uma suíte isolada:
 ## Estado remoto observado em 24/11/2026
 
 - Projeto vinculado: `Base de Dados Phiq`;
-- 40 migrations alinhadas entre local e remoto;
+- 48 migrations alinhadas entre local e remoto;
 - `classify-social-lead`, `process-social-engagement` e `panel-social-crm`
   implantadas, junto aos gateways atualizados do worker;
 - painel CRM publicado e validado no domínio Vercel de produção;
@@ -111,6 +112,19 @@ O coletor experimental possui uma suíte isolada:
 - classificação e rascunhos usam o Gemini conectado; um fixture positivo
   concluiu o job e persistiu uma única ação `proposed`, sem `sent_at` nem
   `provider_action_id`, mantendo a aprovação humana obrigatória.
+- inbox conversacional e operação publicadas no painel em `/conversas` e
+  `/operacao`, com SLA, distribuição, opt-out, catálogo aprovado, feedback de
+  modelo, alertas e solicitações de anonimização;
+- cinco novas Edge Functions ativas para inbox, operação, fila conversacional,
+  dispatch e manutenção; seus testes negativos rejeitam chamada sem JWT ou
+  segredo de worker;
+- workflows `IG Social Selling — Dispatch Conversation` e
+  `IG Social Selling — Monitoring and Retention` versionados no repositório.
+  A importação/publicação na instância n8n ainda precisa de confirmação na
+  sessão administrativa;
+- o gate `INSTAGRAM_CONVERSATION_DISPATCH_ENABLED` permanece `false` até o
+  webhook `messages` ser confirmado com um evento real. Nenhum Direct
+  conversacional foi enviado.
 
 A configuração segura para novos ambientes continua sendo
 `INSTAGRAM_DISPATCH_DRY_RUN=true`,
@@ -180,4 +194,19 @@ mudança de escopo exige fila reconciliada, rollback preparado e conferência de
 - ativar o piloto não aprova nem envia ações. O primeiro envio depende de
   revisão humana individual;
 - respostas recebidas devem ser acompanhadas no Meta Inbox até a ingestão do
-  webhook `messages` ser implementada e homologada.
+  webhook `messages` ser homologada. A ingestão, inbox e dispatcher já estão
+  implementados, mas o gate de continuidade continua desligado até o teste
+  ponta a ponta e a promoção dos workflows n8n.
+
+## Promoção da inbox conversacional — pendente de homologação
+
+1. Importar/atualizar `ig-social-selling-orchestrator.json` preservando a
+   credencial `PHIQ Supabase Worker` e a credencial Gemini existentes.
+2. Importar e publicar `ig-social-selling-maintenance.json`.
+3. Importar `ig-social-selling-conversation-dispatch.json`; ele pode consultar a
+   fila, mas a Edge Function responderá `423` enquanto o gate estiver fechado.
+4. Assinar `messages` no App Meta e produzir uma entrada autorizada.
+5. Validar idempotência, rascunho `proposed`, painel, SLA e janela sem aprovar
+   envio.
+6. Habilitar `INSTAGRAM_CONVERSATION_DISPATCH_ENABLED=true` somente depois dos
+   cinco itens anteriores e com fila aprovada conhecida.

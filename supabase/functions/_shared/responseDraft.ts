@@ -1,4 +1,4 @@
-export const RESPONSE_DRAFT_PROMPT_VERSION = "SOCIAL_REPLY_DRAFT_V2";
+export const RESPONSE_DRAFT_PROMPT_VERSION = "SOCIAL_REPLY_DRAFT_V3";
 export const RESPONSE_DRAFT_MODEL = "models/gemini-3.6-flash";
 
 const SENTIMENTS = ["positive", "neutral", "negative", "mixed", "unknown"] as const;
@@ -8,11 +8,13 @@ export type DraftSentiment = typeof SENTIMENTS[number];
 export interface ResponseDraftContext {
   commentText: string;
   source: "realtime" | "historical_backfill";
-  eventType: "comments" | "live_comments";
+  eventType: "comments" | "live_comments" | "messages";
   classification: Record<string, unknown>;
+  offers?: Array<Record<string, unknown>>;
+  conversationHistory?: Array<Record<string, unknown>>;
 }
 
-export type ResponseDraftChannel = "public_reply" | "private_reply";
+export type ResponseDraftChannel = "public_reply" | "private_reply" | "conversation_reply";
 
 export interface ResponseDraft {
   message_text: string;
@@ -52,6 +54,13 @@ This is the only private reply allowed from the comment unless the person answer
 Refer only to the commercial interest that the person explicitly showed and ask permission to continue the conversation.
 Do not make a cold offer, pressure the person, fabricate a catalog item or say that more messages will be sent automatically.`;
 
+export const CONVERSATION_REPLY_DRAFT_PROMPT = `Version ${RESPONSE_DRAFT_PROMPT_VERSION}. Write one proposed Instagram conversation reply for PHIQ.
+${COMMON_PROMPT}
+The person has already replied in Direct and the response window is open. Address the latest message first.
+Use only catalog facts explicitly present in Context JSON. Never invent a product, price, discount, result, deadline or availability.
+Never state anything listed in prohibited_claims.
+Advance the conversation with at most one useful question. Do not pressure the person and do not claim an automatic follow-up.`;
+
 const PRIVATE_INTENTS = new Set([
   "franchise_interest",
   "q3_interest",
@@ -68,6 +77,10 @@ export function selectResponseDraftChannel(
   const potential = String(classification.commercial_potential ?? "unknown");
   const score = Number(classification.lead_score ?? 0);
   const needsMoreSignal = classification.needs_more_signal !== false;
+
+  if (context.source === "realtime" && context.eventType === "messages") {
+    return "conversation_reply";
+  }
 
   return context.source === "realtime" &&
       context.eventType === "comments" &&
@@ -91,15 +104,42 @@ export function buildResponseDraftRequest(context: ResponseDraftContext): {
   const signals = Array.isArray(classification.signals)
     ? classification.signals.slice(0, 12).map((value) => String(value).slice(0, 120))
     : [];
+  const offers = Array.isArray(context.offers)
+    ? context.offers.slice(0, 8).map((offer) => ({
+      name: String(offer.name ?? "").slice(0, 160),
+      offer_kind: String(offer.offer_kind ?? "").slice(0, 40),
+      route_type: String(offer.route_type ?? "").slice(0, 40),
+      summary: String(offer.summary ?? "").slice(0, 600),
+      audience: String(offer.audience ?? "").slice(0, 300),
+      price_text: offer.price_text == null ? null : String(offer.price_text).slice(0, 120),
+      approved_claims: Array.isArray(offer.approved_claims)
+        ? offer.approved_claims.slice(0, 12).map((value) => String(value).slice(0, 160))
+        : [],
+      prohibited_claims: Array.isArray(offer.prohibited_claims)
+        ? offer.prohibited_claims.slice(0, 12).map((value) => String(value).slice(0, 160))
+        : [],
+    })).filter((offer) => offer.name)
+    : [];
+  const conversationHistory = Array.isArray(context.conversationHistory)
+    ? context.conversationHistory.slice(-12).map((message) => ({
+      direction: message.direction === "outbound" ? "outbound" : "inbound",
+      text: String(message.message_text ?? message.text ?? "").slice(0, 500),
+    })).filter((message) => message.text)
+    : [];
 
   return {
     system_prompt: targetChannel === "private_reply"
       ? PRIVATE_REPLY_DRAFT_PROMPT
+      : targetChannel === "conversation_reply"
+      ? CONVERSATION_REPLY_DRAFT_PROMPT
       : RESPONSE_DRAFT_PROMPT,
     context_json: JSON.stringify({
       comment_text: context.commentText.slice(0, 2000),
+      customer_text: context.commentText.slice(0, 2000),
       source: context.source,
       target_channel: targetChannel,
+      conversation_history: conversationHistory,
+      offers,
       classification: {
         intent: classification.intent ?? "other",
         commercial_potential: classification.commercial_potential ?? "unknown",

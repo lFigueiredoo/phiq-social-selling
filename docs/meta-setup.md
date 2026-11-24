@@ -55,9 +55,26 @@ Fontes oficiais:
 
 A mensagem inicial usa o ID do comentário como destinatário. A Meta permite
 continuação somente depois que a pessoa responde, e dentro da janela de
-mensagens aplicável. Nesta fase, essas respostas devem ser tratadas no Meta
-Inbox: o webhook `messages` ainda não é ingerido pelo CRM e nenhum follow-up é
-automático.
+mensagens aplicável. O backend já reconhece `entry[].messaging[]`, descarta
+echo/delivery/self-message, deduplica por `mid`, respeita supressão e cria inbox,
+job e SLA. Essa capacidade ainda não autoriza continuidade: a assinatura
+`messages` precisa ser confirmada no App Dashboard e homologada com uma entrada
+real antes de mudar `INSTAGRAM_CONVERSATION_DISPATCH_ENABLED=false`.
+
+## Homologação do webhook `messages`
+
+1. No produto Instagram do App Dashboard, manter o callback já validado e
+   adicionar o campo `messages` à assinatura da conta profissional.
+2. Não alterar token, callback ou permissões de comentários durante esse teste.
+3. Enviar uma mensagem de uma conta de teste autorizada para `@phiq.oficial`.
+4. Confirmar exatamente um `webhook_event` do tipo `messages`, um job
+   `process_instagram_message`, uma conversa e uma mensagem inbound.
+5. Repetir a mesma entrega de teste e confirmar que unread, SLA e mensagem não
+   são duplicados.
+6. Confirmar que o worker cria no máximo um rascunho `proposed`, sem envio.
+7. Conferir a conversa no painel, a janela de 24 horas, responsável e opt-out.
+8. Somente depois promover os dois workflows novos e habilitar o gate de
+   dispatcher. A primeira saída real continua exigindo aprovação explícita.
 
 ## Arquitetura de coexistência
 
@@ -165,6 +182,10 @@ autoriza responder comentários nem iniciar Direct.
 - Aprovação humana continua obrigatória.
 - Comentários históricos permitem somente resposta pública.
 - Private Reply/DM exige política elegível e janela válida.
+- Continuidade de Direct exige uma mensagem inbound real, janela de 24 horas,
+  opt-out limpo, limite por conta, máximo 5/24h por conversa e aprovação humana.
+- `INSTAGRAM_CONVERSATION_DISPATCH_ENABLED=false` permanece independente do
+  piloto de Private Reply até a homologação descrita acima.
 - `INSTAGRAM_DISPATCH_DRY_RUN=false` só pode ser aplicado para um teste real
   controlado, com aprovação explícita e plano imediato de retorno ao modo
   seguro.

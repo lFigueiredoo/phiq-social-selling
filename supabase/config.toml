@@ -450,6 +450,15 @@ verify_jwt = false
 [functions.n8n-update-instagram-job]
 verify_jwt = false
 
+[functions.n8n-get-next-conversation-message]
+verify_jwt = false
+
+[functions.n8n-dispatch-conversation-message]
+verify_jwt = false
+
+[functions.n8n-maintain-social-selling]
+verify_jwt = false
+
 [functions.classify-social-lead]
 verify_jwt = false
 
@@ -460,6 +469,12 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.panel-social-crm]
+verify_jwt = true
+
+[functions.panel-conversations]
+verify_jwt = true
+
+[functions.panel-social-operations]
 verify_jwt = true
 
 [functions.panel-list-actions]

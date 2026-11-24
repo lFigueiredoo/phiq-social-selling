@@ -6,19 +6,20 @@ recebe webhooks assinados, persiste eventos idempotentes, classifica o contexto
 com regras determinísticas/IA, conduz o lead pelos funis e mantém qualquer ação
 de saída sob política e aprovação.
 
-## Estado validado em 23–24/11/2026
+## Estado validado em 24/11/2026
 
 O ambiente local está executável e foi validado com:
 
-- 35 migrations-base aplicadas do zero em PostgreSQL 17 e 5 incrementais
-  aplicadas e validadas no remoto;
-- 21 Edge Functions versionadas;
+- 48 migrations alinhadas e validadas no Supabase remoto;
+- 26 Edge Functions versionadas, incluindo inbox conversacional, operação e
+  manutenção;
 - 10 contratos SQL/pgTAP, 2 testes de concorrência e 1 teste HTTP integrado;
-- 45 testes Node de contrato e 48 testes Python do coletor;
+- 52 testes Node de contrato e avaliação de modelo, além de 48 testes Python
+  do coletor experimental;
 - build TypeScript/Vite, lint e `npm audit` de produção sem falhas;
 - frontend dividido por rota, sem o bundle monolítico anterior.
 
-O Supabase remoto foi alinhado às 40 migrations e às funções
+O Supabase remoto foi alinhado às 48 migrations e às funções
 versionadas, com backup anterior ao deploy e testes negativos de autenticação.
 O painel CRM foi publicado em
 [`phiq-social-selling-panel.vercel.app`](https://phiq-social-selling-panel.vercel.app/)
@@ -39,8 +40,18 @@ e dead letter para webhook sem mapeamento. O modo ativo continua sendo
 Direct elegível exigem aprovação humana; Direct fica restrito a comentário novo
 em tempo real, interesse comercial explícito, score mínimo 70, janela da Meta e
 limite de 5 mensagens por 24 horas.
+
+Em 24/11/2026 foi publicada uma segunda camada para continuidade de conversas:
+inbox de Direct com SLA, responsável, prioridade, opt-out, janela de 24 horas,
+catálogo comercial aprovado, feedback do Gemini, alertas operacionais e rotinas
+de privacidade. O backend está ativo e o painel possui as rotas `/conversas` e
+`/operacao`. O envio de Direct conversacional continua bloqueado pelo gate
+independente `INSTAGRAM_CONVERSATION_DISPATCH_ENABLED=false` até a assinatura
+`messages` da Meta e um evento real de entrada serem homologados. Os workflows
+n8n dessa camada estão versionados, mas sua promoção na instância precisa ser
+confirmada antes da ativação. Nenhuma mensagem foi enviada por essa entrega.
 Veja [`docs/meta-setup.md`](docs/meta-setup.md) e o último inventário completo em
-[`docs/audit-2026-11-23.md`](docs/audit-2026-11-23.md).
+[`docs/audit-2026-11-24-conversational.md`](docs/audit-2026-11-24-conversational.md).
 
 ## Arquitetura
 

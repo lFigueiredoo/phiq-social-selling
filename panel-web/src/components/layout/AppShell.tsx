@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import {
   Building2,
+  Activity,
   History,
   Inbox,
+  MessagesSquare,
   TrendingUp,
   LogOut,
   ShieldCheck,
@@ -101,6 +103,9 @@ export function AppShell({ children }: AppShellProps) {
             <NavLink to="/social-selling" className={({ isActive }) => navClassName(isActive)}>
               <TrendingUp className="size-3.5" /> Social Selling
             </NavLink>
+            <NavLink to="/conversas" className={({ isActive }) => navClassName(isActive)}>
+              <MessagesSquare className="size-3.5" /> Conversas
+            </NavLink>
             <NavLink
               to="/"
               end
@@ -121,6 +126,11 @@ export function AppShell({ children }: AppShellProps) {
               >
                 <History className="size-3.5" />
                 Comentários históricos
+              </NavLink>
+            )}
+            {isAdmin && (
+              <NavLink to="/operacao" className={({ isActive }) => navClassName(isActive)}>
+                <Activity className="size-3.5" /> Operação
               </NavLink>
             )}
           </nav>

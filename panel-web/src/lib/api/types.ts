@@ -12,6 +12,7 @@ export interface PanelDispatchStatus {
   public_reply_only: boolean;
   private_reply_pilot_enabled: boolean;
   private_reply_daily_limit: number;
+  conversation_dispatch_enabled: boolean;
   allowed_action_types: ActionType[];
 }
 

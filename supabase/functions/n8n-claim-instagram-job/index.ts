@@ -59,9 +59,9 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data: claimed, error: claimError } = await supabase.rpc("claim_processing_job", {
+  const { data: claimed, error: claimError } = await supabase.rpc("claim_social_processing_job", {
     p_worker_id: workerId,
-    p_job_type: "process_instagram_comment",
+    p_job_types: ["process_instagram_comment", "process_instagram_message"],
   });
 
   if (claimError) {
@@ -101,20 +101,31 @@ Deno.serve(async (req: Request) => {
   const entries = Array.isArray(payload?.entry) ? payload.entry : [];
   let entry: any = null;
   let change: any = null;
+  let messageEvent: any = null;
 
   for (const candidateEntry of entries) {
     const changes = Array.isArray(candidateEntry?.changes) ? candidateEntry.changes : [];
     const candidateChange = changes.find((c: any) =>
-      c?.field === "comments" && String(c?.value?.id ?? "") === String(event.external_object_id ?? "")
+      (c?.field === "comments" || c?.field === "live_comments") &&
+      String(c?.value?.id ?? "") === String(event.external_object_id ?? "")
     );
     if (candidateChange) {
       entry = candidateEntry;
       change = candidateChange;
       break;
     }
+    const messages = Array.isArray(candidateEntry?.messaging) ? candidateEntry.messaging : [];
+    const candidateMessage = messages.find((item: any) =>
+      String(item?.message?.mid ?? "") === String(event.external_object_id ?? "")
+    );
+    if (candidateMessage) {
+      entry = candidateEntry;
+      messageEvent = candidateMessage;
+      break;
+    }
   }
 
-  if (!change) {
+  if (!change && !messageEvent) {
     return json({
       ok: true,
       engagement: null,
@@ -133,8 +144,63 @@ Deno.serve(async (req: Request) => {
         instagram_account_id: event.instagram_account_id,
         type: event.event_type,
         received_at: event.received_at,
-        comment_id: event.external_object_id,
-        parse_status: "comment_change_not_found",
+        external_engagement_id: event.external_object_id,
+        parse_status: "engagement_payload_not_found",
+      },
+    });
+  }
+
+  if (messageEvent) {
+    const senderId = messageEvent?.sender?.id != null
+      ? String(messageEvent.sender.id)
+      : null;
+    const messageId = messageEvent?.message?.mid != null
+      ? String(messageEvent.message.mid)
+      : String(event.external_object_id ?? "");
+    const timestamp = Number(messageEvent?.timestamp);
+    const occurredAt = Number.isFinite(timestamp) && timestamp > 0
+      ? new Date(timestamp).toISOString()
+      : event.received_at;
+    const text = typeof messageEvent?.message?.text === "string"
+      ? messageEvent.message.text.slice(0, 2000)
+      : "";
+    return json({
+      ok: true,
+      engagement: {
+        organization_id: event.organization_id,
+        instagram_account_id: event.instagram_account_id,
+        external_user_id: senderId,
+        username: null,
+        display_name: null,
+        engagement_type: "dm",
+        external_engagement_id: messageId,
+        webhook_event_id: event.id,
+        text,
+        source: "realtime",
+        occurred_at: occurredAt,
+        media_external_id: null,
+        metadata: { event_type: "messages" },
+      },
+      job: {
+        id: job.id,
+        type: job.job_type,
+        status: job.status,
+        attempts: job.attempts,
+        max_attempts: job.max_attempts,
+        locked_at: job.locked_at,
+        locked_by: job.locked_by,
+      },
+      event: {
+        id: event.id,
+        organization_id: event.organization_id,
+        instagram_account_id: event.instagram_account_id,
+        type: event.event_type,
+        received_at: event.received_at,
+        source: "realtime",
+        instagram_user_id: entry?.id != null ? String(entry.id) : null,
+        message_id: messageId,
+        message_text: text,
+        sender: { id: senderId },
       },
     });
   }

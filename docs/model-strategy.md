@@ -14,7 +14,7 @@ reutiliza o Google Gemini já conectado ao n8n pela credencial criptografada
 | Classificação explícita | Regras em `socialClassifier.ts` | Não chama o Gemini quando a evidência atual já resolve a rota |
 | Classificação ambígua | Gemini conectado ao n8n | Recebe somente prompt/contexto limitados; saída JSON volta ao backend para validação |
 | Confiança e score finais | Backend determinístico | Confiança sem evidência fica limitada a `0.84`; score informado pelo modelo é descartado e recalculado |
-| Rascunho de resposta pública ou Private Reply elegível | Gemini conectado ao n8n | Prompt separado por canal, saída estrita e persistência `proposed`; toda resposta exige aprovação humana |
+| Rascunho de resposta pública, Private Reply ou continuidade elegível | Gemini conectado ao n8n | Prompt separado por canal, histórico limitado, catálogo aprovado, saída estrita e persistência `proposed`; toda resposta exige aprovação humana |
 | Casos sensíveis, reclamações e baixa confiança | Revisão humana | Nenhum modelo autoriza envio ou altera elegibilidade sozinho |
 | Auditoria do classificador | Avaliação versionada e anonimizada | Executada antes de trocar modelo, prompt, schema ou limiar |
 
@@ -41,8 +41,10 @@ segredo, token, service-role key ou permissão de outbound.
 ## Contrato do rascunho de resposta
 
 Depois que a classificação é concluída, o backend pode devolver um segundo
-prompt, `SOCIAL_REPLY_DRAFT_V2`. O contexto é limitado ao comentário, origem e
-classificação já validada. O Gemini devolve exatamente `message_text`,
+prompt, `SOCIAL_REPLY_DRAFT_V3`. Para comentário, o contexto é limitado à
+origem e classificação já validada. Para continuidade, inclui somente o
+histórico recente necessário e as ofertas compatíveis do catálogo aprovado,
+com afirmações permitidas e proibidas explícitas. O Gemini devolve exatamente `message_text`,
 `sentiment` e `analysis_summary`; o backend valida o schema, normaliza o texto e
 rejeita links, campos extras, mensagens acima de 500 caracteres ou acima de
 1.000 bytes UTF-8.
@@ -72,6 +74,11 @@ independentes.
    `INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=false`,
    `INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED=true` e limite 5/24h. Fora dessa
    combinação explícita, Direct continua fail-closed.
+7. Medir aceitação, edição, rejeição e marcação `unsafe` dos rascunhos. O
+   painel registra feedback por mensagem e revisor sem permitir que o modelo
+   aprenda ou publique automaticamente.
+8. Oferta, preço ou URL não presente no catálogo ativo não pode aparecer no
+   rascunho. A URL também é revalidada no backend antes da persistência.
 
 ## Separação de responsabilidades
 

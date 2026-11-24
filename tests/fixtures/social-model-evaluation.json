@@ -1,0 +1,10 @@
+[
+  { "text": "Quero abrir uma franquia PHIQ na minha cidade", "media": "", "route": "franchise", "commercial": true },
+  { "text": "Qual o investimento para abrir uma unidade?", "media": "post sobre franquia e expansão", "route": "franchise", "commercial": true },
+  { "text": "Nossa indústria precisa melhorar os processos de qualidade", "media": "", "route": "q3", "commercial": true },
+  { "text": "Como participo do treinamento e qual o valor?", "media": "post sobre curso e certificação", "route": "hotmart", "commercial": true },
+  { "text": "Onde compro o aromatizador NUY?", "media": "", "route": "nuy", "commercial": true },
+  { "text": "Parabéns, conteúdo excelente!", "media": "post sobre franquia", "route": "no_profile", "commercial": false },
+  { "text": "👏👏", "media": "post sobre curso", "route": "no_profile", "commercial": false },
+  { "text": "Quero saber mais", "media": "post sobre produto", "route": "no_profile", "commercial": false }
+]

@@ -73,16 +73,25 @@ Quando recebe `classification_required`, o workflow usa
 `Google Gemini(PaLM) Api account`. A saída volta a `process-social-engagement`,
 onde schema, evidência, confiança e score são validados antes da fase C.
 
-Para comentários classificados, `n8n-prepare-instagram-draft` monta o prompt
-`SOCIAL_REPLY_DRAFT_V2` no backend. `models/gemini-3.6-flash` gera um JSON
+Para comentários classificados e mensagens recebidas,
+`n8n-prepare-instagram-draft` monta o prompt `SOCIAL_REPLY_DRAFT_V3` no backend.
+No canal conversacional, o prompt acrescenta histórico recente limitado e
+catálogo comercial aprovado, incluindo alegações proibidas. `models/gemini-3.6-flash` gera um JSON
 estrito com o texto, sentimento e resumo. `n8n-save-instagram-draft` revalida a saída e chama
-`save_instagram_response_draft`, que escolhe o canal no backend e grava uma
-única ação `proposed`. `private_reply` exige comentário em tempo real,
+`save_instagram_response_draft` ou `save_instagram_conversation_draft`, que
+escolhe o canal no backend e grava uma única saída `proposed`. `private_reply` exige comentário em tempo real,
 intenção comercial explícita, potencial médio/alto, score >= 70 e sinal
 suficiente; o worker consulta a política da Meta antes de concluir o job.
 Comentários históricos preservam a origem `historical_backfill` e nunca geram
 Direct. Falha no rascunho ou na política falha o job com backoff; reexecução é
 idempotente e não duplica a ação.
+
+Jobs `process_instagram_message` usam o mesmo claim atômico, mas só existem
+depois de um webhook `messages` autêntico. O dispatcher conversacional é um
+workflow separado e só reclama a mensagem aprovada exata recebida no poll. A
+Edge Function revalida janela, opt-out, limite por conta, limite 5/24h por
+conversa e o gate `INSTAGRAM_CONVERSATION_DISPATCH_ENABLED`; rede/timeout
+incerto não é retentado automaticamente.
 
 Os dois nós Gemini têm três tentativas com intervalo de um segundo. Os nós de
 decodificação aceitam respostas JSON diretas, strings, `Buffer`, streams e

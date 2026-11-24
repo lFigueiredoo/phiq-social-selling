@@ -1,0 +1,74 @@
+{
+  "name": "IG Social Selling — Monitoring and Retention",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] } },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [0, 0],
+      "id": "cbda4d23-9a4a-4195-a48d-e27e02cecd61",
+      "name": "Monitor every 5 minutes"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://leahcbnaefuulswrjraq.supabase.co/functions/v1/n8n-maintain-social-selling",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"run_retention\": false\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [240, 0],
+      "id": "fb0873da-2cf9-481c-891c-5c0d0d350e16",
+      "name": "Check operation",
+      "credentials": { "httpHeaderAuth": { "id": "2FshkIg4Qivy736d", "name": "PHIQ Supabase Worker" } }
+    },
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 3 * * *" }] } },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [0, 176],
+      "id": "6f720d6f-f6b3-4ee4-b036-1b525fdb7b29",
+      "name": "Retention daily at 03:00"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://leahcbnaefuulswrjraq.supabase.co/functions/v1/n8n-maintain-social-selling",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"run_retention\": true\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [240, 176],
+      "id": "9c0329c9-0bf2-4356-bb49-a7fb3171e507",
+      "name": "Apply enabled retention policies",
+      "credentials": { "httpHeaderAuth": { "id": "2FshkIg4Qivy736d", "name": "PHIQ Supabase Worker" } }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Monitor every 5 minutes": { "main": [[{ "node": "Check operation", "type": "main", "index": 0 }]] },
+    "Retention daily at 03:00": { "main": [[{ "node": "Apply enabled retention policies", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1", "binaryMode": "separate", "timezone": "America/Sao_Paulo" },
+  "versionId": "d30312f1-1ef5-4cf1-b157-64871bc4a33e",
+  "meta": { "instanceId": "3bf5cf13aa2c57914a33301db91c1ccbef6f448b6dd78c7ad41eb441b9008196" },
+  "nodeGroups": [],
+  "tags": []
+}

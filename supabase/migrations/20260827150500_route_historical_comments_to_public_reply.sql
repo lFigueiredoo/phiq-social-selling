@@ -22,7 +22,6 @@ declare
   v_decision text;
   v_reason text;
   v_decision_id uuid;
-  v_outbound_id uuid;
   v_action_type text;
   v_policy_status text;
   v_target_user_id text;
@@ -127,8 +126,7 @@ begin
     set message_text = case when oa.status = 'proposed' then excluded.message_text else oa.message_text end,
         target_user_id = coalesce(oa.target_user_id, excluded.target_user_id),
         target_username = coalesce(oa.target_username, excluded.target_username),
-        updated_at = clock_timestamp()
-    returning oa.id into v_outbound_id;
+        updated_at = clock_timestamp();
   end if;
 
   return query

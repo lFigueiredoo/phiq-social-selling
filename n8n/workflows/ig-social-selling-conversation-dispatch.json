@@ -1,0 +1,87 @@
+{
+  "name": "IG Social Selling — Dispatch Conversation",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 1 }] } },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [0, 0],
+      "id": "8eacdfdd-6fb0-4d4d-b94d-081bfb84a640",
+      "name": "Every minute"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://leahcbnaefuulswrjraq.supabase.co/functions/v1/n8n-get-next-conversation-message",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [224, 0],
+      "id": "e0903306-5f99-423b-80c7-6436a56c9c16",
+      "name": "Get Approved Conversation Message",
+      "credentials": { "httpHeaderAuth": { "id": "2FshkIg4Qivy736d", "name": "PHIQ Supabase Worker" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 3 },
+          "conditions": [{
+            "id": "c12e3be5-5605-4cd5-879f-bf042b4960c1",
+            "leftValue": "={{ Boolean($json.message?.message_id) }}",
+            "rightValue": "",
+            "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+          }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [448, 0],
+      "id": "64c11326-f20c-41d6-a045-779375c38187",
+      "name": "Message available"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://leahcbnaefuulswrjraq.supabase.co/functions/v1/n8n-dispatch-conversation-message",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message_id\": \"{{$('Get Approved Conversation Message').item.json.message.message_id}}\",\n  \"dispatcher_id\": \"n8n-conversation-dispatcher-01\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [672, -48],
+      "id": "5897d8ce-a3a8-43ad-996f-12a985a693fc",
+      "name": "Dispatch Conversation Message",
+      "credentials": { "httpHeaderAuth": { "id": "2FshkIg4Qivy736d", "name": "PHIQ Supabase Worker" } }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every minute": { "main": [[{ "node": "Get Approved Conversation Message", "type": "main", "index": 0 }]] },
+    "Get Approved Conversation Message": { "main": [[{ "node": "Message available", "type": "main", "index": 0 }]] },
+    "Message available": { "main": [[{ "node": "Dispatch Conversation Message", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1", "binaryMode": "separate" },
+  "versionId": "de1c1bba-6537-4c70-b076-ec61638333ae",
+  "meta": { "instanceId": "3bf5cf13aa2c57914a33301db91c1ccbef6f448b6dd78c7ad41eb441b9008196" },
+  "nodeGroups": [],
+  "tags": []
+}

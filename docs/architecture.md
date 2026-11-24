@@ -23,7 +23,7 @@ processing_jobs (fila em Postgres)
    ▼
 n8n (worker)
    │  consome o job; casos explícitos ficam no backend,
-   │  casos ambíguos chamam o Gemini já conectado
+   │  casos ambíguos e rascunhos chamam o Gemini já conectado
    ▼
 Google Gemini (credencial criptografada no n8n)
    │  análise semântica: intenção, sentimento, potencial comercial
@@ -37,6 +37,7 @@ outbound_actions (fila de saída)
    ▼
 Instagram API (Graph API oficial)
    │  resposta pública ao comentário e/ou private reply
+   │  e continuidade de Direct somente após resposta do contato
    ▼
 Leads / Interactions (Supabase — fonte de verdade)
    ▼
@@ -69,13 +70,16 @@ resiliente, sem bloquear o webhook.
 ### n8n (worker de orquestração)
 Consome jobs da fila. O backend devolve prompt e contexto limitados somente
 quando as regras não resolvem a classificação. O n8n chama o Gemini com a
-credencial criptografada e devolve o JSON ao backend. Nunca chama a API do
-Instagram para enviar nada neste fluxo.
+credencial criptografada e devolve o JSON ao backend. O worker também pode
+gerar uma sugestão de resposta com histórico limitado e catálogo aprovado.
+Nunca decide elegibilidade nem chama a API do Instagram para enviar nada nesse
+fluxo.
 
 ### Google Gemini
-Executa somente a classificação semântica ambígua. Não recebe tokens do
-Supabase ou da Meta, não aplica score final, não altera funil e não possui
-permissão de disparar ações.
+Executa classificação semântica ambígua e redação de rascunhos. Não recebe
+tokens do Supabase ou da Meta, não aplica score final, não altera funil e não
+possui permissão de disparar ações. Ofertas, preços, URLs e afirmações
+comerciais ficam limitados ao catálogo aprovado no banco.
 
 ### Decision Engine
 Aplica as regras de automação (tabela `automation_rules`, quando
@@ -88,6 +92,12 @@ Toda ação que vai sair do sistema em direção à Meta (resposta pública,
 private reply, DM) passa primeiro por aqui. Isso garante um ponto único
 de controle de idempotência, rate limit e auditoria antes de qualquer
 chamada externa.
+
+Mensagens de continuidade usam a fila irmã
+`instagram_conversation_messages`, com o mesmo princípio: nascem como
+`proposed`, passam por aprovação humana, janela de 24 horas, opt-out, limite
+atômico por conta e limite de 5/24h por conversa. O dispatcher possui um gate
+próprio e falha fechado.
 
 ### Instagram API (Graph API oficial)
 Único canal de saída para o Instagram. Usa exclusivamente endpoints
@@ -117,11 +127,12 @@ apenas refletem o que já está no banco.
 - Curtidas individuais não fazem parte do escopo do MVP.
 - Nenhuma automação depende de descobrir se um perfil é público.
 
-## Status observado em 28/10/2026
+## Status observado em 24/11/2026
 
-O banco, as Edge Functions, o classificador, os funis e o painel estão
-implementados. O Supabase remoto foi alinhado e a versão do worker com Gemini
-conectado foi importada e aprovada em smoke de fila vazia. Ainda faltam fixture
-positivo e ativação controlada. A configuração do App Meta precisa ser revalidada no
-dashboard. O inventário detalhado e o plano de produção estão em
-[`audit-2026-10-28.md`](audit-2026-10-28.md).
+Banco, Edge Functions, classificador, funis, painel, resposta pública e piloto
+de Private Reply estão em produção. A nova inbox conversacional, operação,
+catálogo, feedback de modelo, privacidade e monitoramento também foram
+publicados. O envio de continuidade permanece bloqueado até a assinatura
+`messages`, o evento real de entrada e a promoção dos workflows n8n serem
+confirmados. O inventário detalhado está em
+[`audit-2026-11-24-conversational.md`](audit-2026-11-24-conversational.md).

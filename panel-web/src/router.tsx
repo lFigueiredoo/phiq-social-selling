@@ -24,6 +24,10 @@ const SocialFunnelPage = lazy(() => import("@/pages/SocialSellingPage")
   .then((module) => ({ default: module.SocialFunnelPage })));
 const SocialLeadDetailPage = lazy(() => import("@/pages/SocialLeadDetailPage")
   .then((module) => ({ default: module.SocialLeadDetailPage })));
+const ConversationsPage = lazy(() => import("@/pages/ConversationsPage")
+  .then((module) => ({ default: module.ConversationsPage })));
+const SocialOperationsPage = lazy(() => import("@/pages/SocialOperationsPage")
+  .then((module) => ({ default: module.SocialOperationsPage })));
 
 function FullScreenLoading() {
   return (
@@ -128,6 +132,8 @@ export function AppRouter() {
       <Route path="/social-selling/leads" element={<Protected><SocialLeadsPage /></Protected>} />
       <Route path="/social-selling/funil" element={<Protected><SocialFunnelPage /></Protected>} />
       <Route path="/social-selling/lead/:id" element={<Protected><SocialLeadDetailPage /></Protected>} />
+      <Route path="/conversas" element={<Protected><ConversationsPage /></Protected>} />
+      <Route path="/operacao" element={<Protected><AdminOnly><SocialOperationsPage /></AdminOnly></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

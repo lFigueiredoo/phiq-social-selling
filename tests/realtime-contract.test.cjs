@@ -56,12 +56,20 @@ function loadHandler(name, env) {
   const client = {
     from: query,
     async rpc(name, args) {
+      if (name === 'is_social_identity_suppressed') {
+        return { data: false, error: null };
+      }
       if (name === 'ingest_social_comment_event') {
         assert.ok([...events.values()].some(event => event.id === args.p_webhook_event_id));
         return { data: 'contact-test', error: null };
       }
-      assert.equal(name, 'claim_processing_job');
-      const job = [...jobs.values()].find(j => j.status === 'pending' && j.job_type === args.p_job_type);
+      if (name === 'ingest_instagram_message_event') {
+        assert.ok([...events.values()].some(event => event.id === args.p_webhook_event_id));
+        return { data: [{ conversation_id: 'conversation-test' }], error: null };
+      }
+      assert.equal(name, 'claim_social_processing_job');
+      const allowed = args.p_job_types ?? [];
+      const job = [...jobs.values()].find(j => j.status === 'pending' && allowed.includes(j.job_type));
       if (!job) return { data: [], error: null };
       Object.assign(job, { status: 'processing', locked_by: args.p_worker_id, attempts: job.attempts + 1, locked_at: new Date().toISOString() });
       return { data: [job], error: null };
@@ -90,6 +98,16 @@ async function webhook(
     field: 'comments', value: { id: commentId, text: 'Quero abrir uma franquia',
       from,
       media: { id: 'media-1', media_product_type: 'FEED' } },
+  }] }] });
+  const key = await webcrypto.subtle.importKey('raw', new TextEncoder().encode('meta-test'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const digest = await webcrypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
+  return handler(new Request('http://local', { method: 'POST', headers: { 'x-hub-signature-256': 'sha256=' + Buffer.from(digest).toString('hex') }, body }));
+}
+
+async function messageWebhook(handler, messageId = 'mid-1', senderId = 'person-dm-1', isEcho = false) {
+  const body = JSON.stringify({ object: 'instagram', entry: [{ id: 'ig-1', messaging: [{
+    sender: { id: senderId }, recipient: { id: 'ig-1' }, timestamp: 1795536000000,
+    message: { mid: messageId, text: 'Quero saber mais sobre a franquia', is_echo: isEcho },
   }] }] });
   const key = await webcrypto.subtle.importKey('raw', new TextEncoder().encode('meta-test'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const digest = await webcrypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
@@ -166,6 +184,35 @@ test('signed self-authored comments are acknowledged without events, jobs or dra
     { id: 'another-meta-namespace', username: 'PHIQ.OFICIAL', name: 'PHIQ' },
   );
   assert.equal(sameUsername.status, 200);
+  assert.equal(events.size, 0);
+  assert.equal(jobs.size, 0);
+});
+
+test('signed inbound Direct is idempotent, ingested and claimed as a dm while echoes are ignored', async () => {
+  reset();
+  const ingress = loadHandler('meta-instagram-webhook', {
+    META_APP_SECRET: 'meta-test', SUPABASE_URL: 'http://local', SUPABASE_SERVICE_ROLE_KEY: 'local-key',
+  });
+  assert.equal((await messageWebhook(ingress)).status, 200);
+  assert.equal((await messageWebhook(ingress)).status, 200);
+  assert.equal(events.size, 1);
+  assert.equal(jobs.size, 1);
+  const event = [...events.values()][0];
+  assert.equal(event.event_type, 'messages');
+  assert.equal(event.idempotency_key, 'meta:instagram:messages:ig-1:mid-1');
+  assert.equal([...jobs.values()][0].job_type, 'process_instagram_message');
+
+  const claimHandler = loadHandler('n8n-claim-instagram-job', {
+    N8N_WORKER_SECRET: 'local-test-secret', SUPABASE_URL: 'http://local', SUPABASE_SERVICE_ROLE_KEY: 'local-key',
+  });
+  const claimed = await (await claim(claimHandler, 'local-test-secret')).json();
+  assert.equal(claimed.engagement.engagement_type, 'dm');
+  assert.equal(claimed.engagement.external_engagement_id, 'mid-1');
+  assert.equal(claimed.engagement.external_user_id, 'person-dm-1');
+  assert.equal(claimed.engagement.metadata.event_type, 'messages');
+
+  reset();
+  assert.equal((await messageWebhook(ingress, 'mid-echo', 'ig-1', true)).status, 200);
   assert.equal(events.size, 0);
   assert.equal(jobs.size, 0);
 });

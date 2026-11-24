@@ -74,6 +74,43 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "server_misconfigured" }, 503);
   }
 
+  const { data: job, error: jobError } = await db
+    .from("processing_jobs")
+    .select("id,organization_id,webhook_event_id,status,locked_by")
+    .eq("id", jobId)
+    .eq("status", "processing")
+    .eq("locked_by", workerId)
+    .maybeSingle();
+  if (jobError) return json({ ok: false, error: "persistence_error" }, 500);
+  if (!job) return json({ ok: false, error: "job_not_claimed_by_worker" }, 409);
+  const { data: event, error: eventError } = await db
+    .from("webhook_events")
+    .select("event_type")
+    .eq("id", job.webhook_event_id)
+    .eq("organization_id", job.organization_id)
+    .maybeSingle();
+  if (eventError || !event) return json({ ok: false, error: "event_not_found" }, 404);
+
+  if (event.event_type === "messages") {
+    const { data, error } = await db.rpc("save_instagram_conversation_draft", {
+      p_job_id: jobId,
+      p_worker_id: workerId,
+      p_message_text: draft.message_text,
+      p_analysis_summary: draft.analysis_summary,
+      p_model_name: RESPONSE_DRAFT_MODEL,
+      p_prompt_version: RESPONSE_DRAFT_PROMPT_VERSION,
+    });
+    if (error) {
+      console.error("save_instagram_conversation_draft failed", error.code);
+      const invalid = error.code === "22023";
+      return json({ ok: false, error: invalid ? "invalid_draft" : "persistence_error" }, invalid ? 400 : 500);
+    }
+    if (!Array.isArray(data) || data.length === 0) {
+      return json({ ok: false, error: "job_not_claimed_by_worker" }, 409);
+    }
+    return json({ ok: true, draft: data[0], policy: null });
+  }
+
   const { data, error } = await db.rpc("save_instagram_response_draft", {
     p_job_id: jobId,
     p_worker_id: workerId,

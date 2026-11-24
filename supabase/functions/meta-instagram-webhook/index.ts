@@ -2,7 +2,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const encoder = new TextEncoder();
-const JOB_TYPE = "process_instagram_comment";
+const COMMENT_JOB_TYPE = "process_instagram_comment";
+const MESSAGE_JOB_TYPE = "process_instagram_message";
 
 function getAdminKey(): string {
   const modern = Deno.env.get("SUPABASE_SECRET_KEYS");
@@ -61,6 +62,12 @@ function normalizedChanges(entry: any): Array<{ field: string; value: any }> {
   }
 
   return [];
+}
+
+function normalizedMessages(entry: any): any[] {
+  return Array.isArray(entry?.messaging)
+    ? entry.messaging.filter((message: any) => message && typeof message === "object")
+    : [];
 }
 
 function configuredValues(...names: string[]): string[] {
@@ -321,7 +328,7 @@ Deno.serve(async (req: Request) => {
       const { error: jobError } = await supabase.from("processing_jobs").insert({
         organization_id: account.organization_id,
         webhook_event_id: eventId,
-        job_type: JOB_TYPE,
+        job_type: COMMENT_JOB_TYPE,
         status: "pending",
         priority: 0,
       });
@@ -352,6 +359,141 @@ Deno.serve(async (req: Request) => {
       if (crmError) {
         console.error("social CRM ingestion failed", crmError.code);
         return new Response("Temporary CRM error", { status: 500 });
+      }
+    }
+
+    for (const messageEvent of normalizedMessages(entry)) {
+      const messageId = messageEvent?.message?.mid != null
+        ? String(messageEvent.message.mid).trim()
+        : "";
+      const senderId = messageEvent?.sender?.id != null
+        ? String(messageEvent.sender.id).trim()
+        : "";
+      const isEcho = messageEvent?.message?.is_echo === true;
+      const isSelfAuthored = Boolean(
+        senderId && account &&
+          (senderId === igExternalId || senderId === account.external_id),
+      );
+
+      // Delivery/read/reaction events do not contain a text-message mid and
+      // outbound echoes must never reopen the lead or create an AI draft.
+      if (!messageId || isEcho || isSelfAuthored) continue;
+
+      const canonicalAccountId = account?.external_id ?? igExternalId;
+      const idempotencyKey =
+        `meta:instagram:messages:${canonicalAccountId}:${messageId}`;
+
+      if (account && senderId) {
+        const { data: suppressed, error: suppressedError } = await supabase.rpc(
+          "is_social_identity_suppressed",
+          {
+            p_organization_id: account.organization_id,
+            p_instagram_account_id: account.id,
+            p_external_user_id: senderId,
+          },
+        );
+        if (suppressedError) {
+          console.error("social suppression lookup failed", suppressedError.code);
+          return new Response("Temporary privacy check error", { status: 500 });
+        }
+        if (suppressed === true) {
+          console.info("Ignoring message from suppressed Instagram identity");
+          continue;
+        }
+      }
+
+      let eventId: string | null = null;
+      let eventStatus: string | null = null;
+      const { data: insertedEvent, error: insertError } = await supabase
+        .from("webhook_events")
+        .insert({
+          organization_id: account?.organization_id ?? null,
+          instagram_account_id: account?.id ?? null,
+          provider: "meta",
+          object_type: "instagram",
+          event_type: "messages",
+          external_object_id: messageId,
+          idempotency_key: idempotencyKey,
+          payload: body,
+          status: account ? "received" : "dead_letter",
+          last_error: account ? null : "instagram_account_mapping_missing",
+        })
+        .select("id,status")
+        .single();
+
+      if (insertError?.code === "23505") {
+        const { data: existingEvent, error: lookupError } = await supabase
+          .from("webhook_events")
+          .select("id,status,organization_id,instagram_account_id")
+          .eq("idempotency_key", idempotencyKey)
+          .single();
+        if (lookupError || !existingEvent) {
+          console.error("message webhook duplicate lookup failed", lookupError?.code);
+          return new Response("Temporary persistence error", { status: 500 });
+        }
+        eventId = existingEvent.id;
+        eventStatus = existingEvent.status;
+        if (account && (!existingEvent.organization_id || !existingEvent.instagram_account_id)) {
+          const { error: repairError } = await supabase
+            .from("webhook_events")
+            .update({
+              organization_id: account.organization_id,
+              instagram_account_id: account.id,
+              status: "received",
+              last_error: null,
+            })
+            .eq("id", eventId)
+            .eq("status", "dead_letter");
+          if (repairError) {
+            console.error("message webhook mapping repair failed", repairError.code);
+            return new Response("Temporary persistence error", { status: 500 });
+          }
+          eventStatus = "received";
+        }
+      } else if (insertError) {
+        console.error("message webhook insert failed", insertError.code);
+        return new Response("Temporary persistence error", { status: 500 });
+      } else {
+        eventId = insertedEvent.id;
+        eventStatus = insertedEvent.status;
+      }
+
+      if (!account || !eventId) {
+        console.warn("Message webhook moved to dead letter: account mapping missing");
+        continue;
+      }
+
+      const { error: jobError } = await supabase.from("processing_jobs").insert({
+        organization_id: account.organization_id,
+        webhook_event_id: eventId,
+        job_type: MESSAGE_JOB_TYPE,
+        status: "pending",
+        priority: 10,
+      });
+      if (jobError && jobError.code !== "23505") {
+        console.error("message processing job insert failed", jobError.code);
+        return new Response("Temporary queue error", { status: 500 });
+      }
+
+      if (eventStatus === "received") {
+        const { error: statusError } = await supabase
+          .from("webhook_events")
+          .update({ status: "queued" })
+          .eq("id", eventId)
+          .eq("status", "received");
+        if (statusError) {
+          console.error("message webhook status update failed", statusError.code);
+          return new Response("Temporary queue error", { status: 500 });
+        }
+      }
+
+      const { error: inboxError } = await supabase.rpc(
+        "ingest_instagram_message_event",
+        { p_webhook_event_id: eventId },
+      );
+      if (inboxError) {
+        console.error("social inbox ingestion failed", inboxError.code);
+        return new Response("Temporary inbox error", { status: 500 });
       }
     }
   }

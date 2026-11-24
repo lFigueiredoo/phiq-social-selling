@@ -5,8 +5,11 @@
 > continha banco, Edge Functions, painel e testes. Na mesma data, banco,
 > funções e painel foram promovidos; o Gemini existente foi conectado ao novo
 > worker. A promoção limpa do worker e a renovação Meta foram concluídas em
-> 23/11/2026. Use [`audit-2026-11-23.md`](audit-2026-11-23.md) como fonte de
-> status e plano de produção.
+> 23/11/2026. A inbox conversacional e a camada operacional foram publicadas
+> em 24/11/2026; a continuidade de Direct permanece bloqueada até a homologação
+> de `messages`. Use
+> [`audit-2026-11-24-conversational.md`](audit-2026-11-24-conversational.md)
+> como fonte de status e plano de produção.
 
 Cada passo só começa após o anterior estar concluído e aprovado
 explicitamente. Nenhum passo avança automaticamente para o seguinte.

@@ -78,6 +78,21 @@ test('backend selects private reply only for strong realtime commercial intent',
   assert.equal(historicalRequest.target_channel, 'public_reply');
 });
 
+test('backend builds conversational Gemini drafts only after a real inbound Direct', () => {
+  const request = drafts.buildResponseDraftRequest({
+    commentText: 'Quero saber valores e como funciona.', source: 'realtime', eventType: 'messages',
+    classification: {
+      intent: 'franchise_interest', commercial_potential: 'high', lead_score: 91,
+      needs_more_signal: false, route_type: 'franchise', confidence: 0.97,
+    },
+    offers: [{ name: 'Franquia PHIQ', offer_kind: 'franchise', summary: 'Modelo de franquia', audience: 'Empreendedores', price_text: null, public_url: null }],
+  });
+  assert.equal(request.target_channel, 'conversation_reply');
+  assert.match(request.system_prompt, /already replied in Direct/i);
+  assert.match(request.system_prompt, /catalog facts/i);
+  assert.equal(JSON.parse(request.context_json).offers[0].name, 'Franquia PHIQ');
+});
+
 test('draft validator accepts the strict contract and normalizes whitespace', () => {
   const result = drafts.validateResponseDraftOutput({
     message_text: '  Obrigado pelo interesse!   Nossa equipe pode orientar os próximos passos.  ',

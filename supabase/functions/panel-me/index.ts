@@ -62,6 +62,10 @@ Deno.serve(async (req: Request) => {
       : 0;
     const privateReplyEnabled = !publicReplyOnly &&
       privateReplyPilotEnabled && privateReplyDailyLimit > 0;
+    const conversationDispatchEnabled = !dispatchDryRun &&
+      (Deno.env.get("INSTAGRAM_CONVERSATION_DISPATCH_ENABLED") ?? "false")
+        .trim()
+        .toLowerCase() === "true";
 
     return json(req, {
       ok: true,
@@ -73,6 +77,7 @@ Deno.serve(async (req: Request) => {
         public_reply_only: publicReplyOnly,
         private_reply_pilot_enabled: privateReplyEnabled,
         private_reply_daily_limit: privateReplyDailyLimit,
+        conversation_dispatch_enabled: conversationDispatchEnabled,
         allowed_action_types: privateReplyEnabled
           ? ["public_reply", "private_reply"]
           : ["public_reply"],
