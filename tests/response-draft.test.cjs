@@ -32,7 +32,7 @@ test('backend builds a bounded public-reply prompt from untrusted context', () =
   });
 
   assert.equal(request.prompt_version, drafts.RESPONSE_DRAFT_PROMPT_VERSION);
-  assert.equal(request.model, 'models/gemini-3-flash-preview');
+  assert.equal(request.model, 'models/gemini-3.6-flash');
   assert.match(request.system_prompt, /untrusted customer data/i);
   assert.match(request.system_prompt, /mandatory human approval/i);
   assert.match(request.system_prompt, /public-reply draft/i);

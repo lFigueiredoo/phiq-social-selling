@@ -11,8 +11,10 @@ ao Google Gemini já conectado ao n8n pela credencial criptografada
 O endpoint `process-social-engagement` executa a fase A no PostgreSQL. Se a
 regra determinística resolver o contexto, ele conclui sem modelo. Caso
 contrário, devolve `result_code=classification_required` com
-`classifier_request`. O n8n chama `models/gemini-3-flash-preview`, devolve o JSON
-ao mesmo endpoint e o backend valida e conclui a fase C.
+`classifier_request`. O n8n chama `models/gemini-3.5-flash-lite`, devolve o JSON
+ao mesmo endpoint e o backend valida e conclui a fase C. O nó tenta no máximo
+três chamadas, com intervalo de um segundo, antes de devolver a falha ao fluxo
+de retry do job.
 
 `classify-social-lead` mantém o mesmo contrato para uso backend isolado:
 classifica deterministicamente ou devolve HTTP 202 com
@@ -56,9 +58,10 @@ do prompt.
 rota. Nenhuma função desse classificador toca `outbound_actions`, chama
 dispatcher, envia DM ou responde comentário.
 
-## Limites atuais
+## Homologação atual
 
 O contexto de mídia só é usado quando já existe em
-`social_engagements.metadata.post_context`. O modelo conectado contém `preview`
-no identificador; antes da ativação contínua, deve passar pelo conjunto de
-avaliação e por um fixture positivo sem outbound.
+`social_engagements.metadata.post_context`. O modelo está fixado em um
+identificador estável e passou por fixture ambíguo real do worker, com
+`classifier_source=ai`, `prompt_version=SOCIAL_SELLING_CLASSIFIER_V1` e nenhum
+outbound. Alterações futuras de modelo ou prompt exigem repetir essa evidência.

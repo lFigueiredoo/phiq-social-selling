@@ -1,9 +1,10 @@
 # Estratégia de modelos para Social Selling
 
-Decisão revisada em 28/10/2026: o projeto não cria uma integração OpenAI. Ele
+Decisão revisada em 24/11/2026: o projeto não cria uma integração OpenAI. Ele
 reutiliza o Google Gemini já conectado ao n8n pela credencial criptografada
-`Google Gemini(PaLM) Api account`. O modelo observado no workflow existente é
-`models/gemini-3-flash-preview`.
+`Google Gemini(PaLM) Api account`. O workflow fixa
+`models/gemini-3.5-flash-lite` para classificação ambígua e
+`models/gemini-3.6-flash` para redação de rascunhos.
 
 ## Matriz operacional
 
@@ -57,10 +58,11 @@ API da Meta. Aprovação e dispatcher continuam etapas independentes.
    positivos, negativos, ambíguos, adversariais e variações de escrita.
 2. Medir precisão de rota, falso positivo comercial, cobertura, latência,
    custo, taxa de fallback, erro de schema e revisão humana.
-3. Fixar o identificador do modelo homologado. O alias atual contém `preview`;
-   uma troca para versão estável exige avaliação comparativa e mudança explícita.
-4. Aplicar timeout, backoff, circuit breaker e orçamento no n8n. Falha do
-   provider reencaminha o job; nunca inventa rota nem conclui silenciosamente.
+3. Fixar os identificadores homologados e alterá-los somente com avaliação,
+   fixture positivo, registro da versão e rollback preparado.
+4. Manter três tentativas, com intervalo de um segundo, nos dois nós Gemini. O
+   backoff do job continua separado e limitado a 15 minutos. Falha do provider
+   reencaminha o job; nunca inventa rota nem conclui silenciosamente.
 5. Limitar e anonimizar o contexto conforme finalidade e LGPD.
 6. Manter `INSTAGRAM_DISPATCH_DRY_RUN=true` até smoke real e aprovação formal.
 

@@ -90,7 +90,7 @@ O coletor experimental possui uma suíte isolada:
   -s .\collectors\instagram-likers -p 'test_*.py' -v
 ```
 
-## Estado remoto observado em 23/11/2026
+## Estado remoto observado em 24/11/2026
 
 - Projeto vinculado: `Base de Dados Phiq`;
 - 35 migrations alinhadas entre local e remoto;
@@ -98,14 +98,16 @@ O coletor experimental possui uma suíte isolada:
   implantadas, junto aos gateways atualizados do worker;
 - painel CRM publicado e validado no domínio Vercel de produção;
 - Google Gemini já conectado ao n8n com a credencial criptografada
-  `Google Gemini(PaLM) Api account` e modelo
-  `models/gemini-3-flash-preview`;
+  `Google Gemini(PaLM) Api account`; classificação usa
+  `models/gemini-3.5-flash-lite` e rascunhos usam
+  `models/gemini-3.6-flash`, ambos com três tentativas de provider;
 - nenhuma chave de provider AI é necessária no Supabase;
 - workflow n8n configurado com `PHIQ Supabase Worker`, publicado com 19 nós e
   um único agendamento; o smoke de claim sem item na fila concluiu com sucesso
   em 9,64 s;
-- classificação e rascunhos usam o Gemini conectado; rascunhos continuam como
-  `proposed` e exigem aprovação humana.
+- classificação e rascunhos usam o Gemini conectado; um fixture positivo
+  concluiu o job e persistiu uma única ação `proposed`, sem `sent_at` nem
+  `provider_action_id`, mantendo a aprovação humana obrigatória.
 
 A operação deve preservar `INSTAGRAM_DISPATCH_DRY_RUN=true`, usar segredos
 diferentes por finalidade e validar qualquer fixture Gemini sem outbound. A

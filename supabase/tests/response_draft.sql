@@ -87,7 +87,7 @@ begin
       'Obrigado pelo carinho! Ficamos felizes com seu comentário.',
       'positive',
       'Resposta cordial e sem promessa comercial.',
-      'models/gemini-3-flash-preview',
+      'models/gemini-3.6-flash',
       'SOCIAL_REPLY_DRAFT_V1'
     );
 
@@ -117,7 +117,7 @@ begin
       'Texto de retry que não pode substituir uma ação existente.',
       'neutral',
       'Retry idempotente.',
-      'models/gemini-3-flash-preview',
+      'models/gemini-3.6-flash',
       'SOCIAL_REPLY_DRAFT_V1'
     );
     if not v_saved.already_exists
@@ -128,7 +128,7 @@ begin
     end if;
     if (select count(*) from public.save_instagram_response_draft(
       v_job, 'other-worker', 'Nunca grava', 'neutral', 'Worker incorreto.',
-      'models/gemini-3-flash-preview', 'SOCIAL_REPLY_DRAFT_V1'
+      'models/gemini-3.6-flash', 'SOCIAL_REPLY_DRAFT_V1'
     )) <> 0 then
       raise exception 'wrong worker persisted a draft';
     end if;

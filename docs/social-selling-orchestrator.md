@@ -69,17 +69,22 @@ usam backoff exponencial limitado a 15 minutos. Entrada terminal usa a RPC
 atômica `dead_letter_processing_job`, preservando a causa e liberando o lock.
 
 Quando recebe `classification_required`, o workflow usa
-`models/gemini-3-flash-preview` com a credencial criptografada
+`models/gemini-3.5-flash-lite` com a credencial criptografada
 `Google Gemini(PaLM) Api account`. A saída volta a `process-social-engagement`,
 onde schema, evidência, confiança e score são validados antes da fase C.
 
 Para comentários classificados, `n8n-prepare-instagram-draft` monta o prompt
-`SOCIAL_REPLY_DRAFT_V1` no backend. O mesmo modelo gera um JSON estrito com o
-texto, sentimento e resumo. `n8n-save-instagram-draft` revalida a saída e chama
+`SOCIAL_REPLY_DRAFT_V1` no backend. `models/gemini-3.6-flash` gera um JSON
+estrito com o texto, sentimento e resumo. `n8n-save-instagram-draft` revalida a saída e chama
 `save_instagram_response_draft`, que fixa o canal como resposta pública e grava
 uma única ação `proposed`. Comentários históricos preservam a origem
 `historical_backfill` e nunca geram Direct nesse fluxo. Falha no rascunho falha
 o job com backoff; reexecução é idempotente e não duplica a ação.
+
+Os dois nós Gemini têm três tentativas com intervalo de um segundo. Os nós de
+decodificação aceitam respostas JSON diretas, strings, `Buffer`, streams e
+buffers fragmentados serializados pelo n8n como objetos de chaves numéricas.
+Formato desconhecido falha fechado e segue o tratamento de retry.
 
 O JSON contém apenas as URLs públicas das Edge Functions e referências por
 nome/ID às credenciais `PHIQ Supabase Worker` e Gemini; ele não contém chave ou

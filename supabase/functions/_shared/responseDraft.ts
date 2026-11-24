@@ -1,5 +1,5 @@
 export const RESPONSE_DRAFT_PROMPT_VERSION = "SOCIAL_REPLY_DRAFT_V1";
-export const RESPONSE_DRAFT_MODEL = "models/gemini-3-flash-preview";
+export const RESPONSE_DRAFT_MODEL = "models/gemini-3.6-flash";
 
 const SENTIMENTS = ["positive", "neutral", "negative", "mixed", "unknown"] as const;
 

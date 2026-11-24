@@ -29,9 +29,15 @@ test('versioned n8n worker is importable, secret-free and fail-safe', () => {
   const geminiNodes = workflow.nodes.filter(node =>
     node.type === '@n8n/n8n-nodes-langchain.googleGemini');
   assert.equal(geminiNodes.length, 2);
+  assert.deepEqual(geminiNodes.map(node => node.parameters.modelId.value), [
+    'models/gemini-3.5-flash-lite',
+    'models/gemini-3.6-flash',
+  ]);
   assert.equal(geminiNodes.every(node =>
-    node.parameters.modelId.value === 'models/gemini-3-flash-preview' &&
     node.credentials.googlePalmApi.name === 'Google Gemini(PaLM) Api account' &&
+    node.retryOnFail === true &&
+    node.maxTries === 3 &&
+    node.waitBetweenTries === 1000 &&
     node.onError === 'continueRegularOutput'), true);
   assert.equal(workflow.connections['Gemini required?'].main[0][0].node,
     'Classify with connected Gemini');
@@ -119,6 +125,21 @@ test('claim gate accepts serialized JSON returned by n8n full response mode', ()
     first: () => ({ json: { statusCode: 200, data: nestedStreamEnvelope } }),
   }), []);
 
+  const fragmentedPayload = Buffer.from(JSON.stringify({ ok: true, job: null }));
+  const splitAt = Math.floor(fragmentedPayload.length / 2);
+  const numericObject = bytes => Object.fromEntries([...bytes].map((byte, index) => [index, byte]));
+  const fragmentedStreamEnvelope = {
+    _readableState: {
+      buffer: {
+        0: { type: 'Buffer', data: numericObject(fragmentedPayload.subarray(0, splitAt)) },
+        1: { type: 'Buffer', data: numericObject(fragmentedPayload.subarray(splitAt)) },
+      },
+    },
+  };
+  assert.deepEqual(executeGate({
+    first: () => ({ json: { statusCode: 200, body: fragmentedStreamEnvelope } }),
+  }), []);
+
   assert.deepEqual(executeGate({
     first: () => ({
       json: {
@@ -127,4 +148,68 @@ test('claim gate accepts serialized JSON returned by n8n full response mode', ()
       },
     }),
   }), []);
+});
+
+test('all HTTP response decoders accept fragmented numeric Buffer objects', () => {
+  const workflow = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
+  const codeFor = name => workflow.nodes.find(node => node.name === name).parameters.jsCode;
+  const fragmentedEnvelope = payload => {
+    const bytes = Buffer.from(JSON.stringify(payload));
+    const first = bytes.subarray(0, Math.floor(bytes.length / 2));
+    const second = bytes.subarray(first.length);
+    const numericObject = chunk => Object.fromEntries(
+      [...chunk].map((byte, index) => [index, byte]),
+    );
+    return {
+      _readableState: {
+        buffer: {
+          0: { type: 'Buffer', data: numericObject(first) },
+          1: { type: 'Buffer', data: numericObject(second) },
+        },
+      },
+    };
+  };
+  const input = json => ({ first: () => ({ json }) });
+  const gate = {
+    claim: { job: { id: 'job-2', locked_by: 'worker-2', attempts: 1 } },
+    engagement: { engagement_type: 'comment' },
+  };
+  const lookup = name => ({ first: () => ({ json: name === 'Gate claimed job' ? gate : {
+    action: 'complete', job_id: 'job-2', worker_id: 'worker-2', error: '',
+  } }) });
+
+  const decodePipeline = new Function('$input', '$', codeFor('Decode pipeline response'));
+  const decoded = decodePipeline(input({
+    statusCode: 200,
+    body: fragmentedEnvelope({
+      result_code: 'classification_required',
+      classifier_request: { prompt: 'fixture' },
+    }),
+  }), lookup);
+  assert.equal(decoded[0].json.needs_model, true);
+  assert.equal(decoded[0].json.pipeline_response.result_code, 'classification_required');
+
+  const normalize = new Function('$input', '$', codeFor('Normalize outcome'));
+  const normalized = normalize(input({
+    pipeline_status: 200,
+    pipeline_response: fragmentedEnvelope({ result_code: 'classified' }),
+  }), lookup);
+  assert.equal(normalized[0].json.action, 'complete');
+  assert.equal(normalized[0].json.draft_eligible, true);
+
+  const decodeDraft = new Function('$input', '$', codeFor('Decode draft request'));
+  const prepared = decodeDraft(input({
+    statusCode: 200,
+    body: fragmentedEnvelope({ ok: true, draft_required: false }),
+  }), lookup);
+  assert.equal(prepared[0].json.draft_required, false);
+  assert.equal(prepared[0].json.action, 'complete');
+
+  const decodePersistence = new Function('$input', '$', codeFor('Decode draft persistence'));
+  const persisted = decodePersistence(input({
+    statusCode: 200,
+    body: fragmentedEnvelope({ ok: true }),
+  }), lookup);
+  assert.equal(persisted[0].json.action, 'complete');
+  assert.equal(persisted[0].json.draft_saved, true);
 });
