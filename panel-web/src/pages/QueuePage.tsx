@@ -20,6 +20,9 @@ function ApprovalQueuePage({ source, historical = false }: ApprovalQueuePageProp
   const automaticDispatchEnabled =
     membershipData?.dispatch?.automatic_dispatch_enabled === true;
   const publicReplyOnly = membershipData?.dispatch?.public_reply_only !== false;
+  const privatePilotEnabled =
+    membershipData?.dispatch?.private_reply_pilot_enabled === true;
+  const privateDailyLimit = membershipData?.dispatch?.private_reply_daily_limit ?? 0;
 
   if (!organizationId) return null;
 
@@ -68,14 +71,18 @@ function ApprovalQueuePage({ source, historical = false }: ApprovalQueuePageProp
               {automaticDispatchEnabled
                 ? publicReplyOnly
                   ? "Piloto ativo: respostas públicas"
-                  : "Envio automático ativo"
+                  : privatePilotEnabled
+                    ? "Piloto ativo: público + Direct"
+                    : "Envio automático ativo"
                 : "Modo seguro: envio bloqueado"}
             </strong>
             <span className="mt-1 block">
               {automaticDispatchEnabled
                 ? publicReplyOnly
                   ? "Somente respostas públicas aprovadas podem ser enviadas. Direct permanece bloqueado."
-                  : "Aprovar libera o dispatcher, que pode tentar o envio automaticamente em até 1 minuto."
+                  : privatePilotEnabled
+                    ? `Direct exige interesse comercial explícito, janela Meta válida e aprovação. Limite: ${privateDailyLimit} em 24 horas.`
+                    : "Aprovar libera o dispatcher, que pode tentar o envio automaticamente em até 1 minuto."
                 : "Aprovar registra a decisão, mas o dispatcher não pode chamar o Instagram."}
             </span>
           </div>

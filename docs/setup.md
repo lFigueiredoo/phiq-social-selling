@@ -93,7 +93,7 @@ O coletor experimental possui uma suíte isolada:
 ## Estado remoto observado em 24/11/2026
 
 - Projeto vinculado: `Base de Dados Phiq`;
-- 35 migrations alinhadas entre local e remoto;
+- 40 migrations alinhadas entre local e remoto;
 - `classify-social-lead`, `process-social-engagement` e `panel-social-crm`
   implantadas, junto aos gateways atualizados do worker;
 - painel CRM publicado e validado no domínio Vercel de produção;
@@ -113,10 +113,12 @@ O coletor experimental possui uma suíte isolada:
   `provider_action_id`, mantendo a aprovação humana obrigatória.
 
 A configuração segura para novos ambientes continua sendo
-`INSTAGRAM_DISPATCH_DRY_RUN=true`. Em produção, o piloto autorizado em
-24/11/2026 usa `INSTAGRAM_DISPATCH_DRY_RUN=false` junto de
-`INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=true`: apenas respostas públicas
-aprovadas entram na fila do dispatcher, e Direct permanece bloqueado.
+`INSTAGRAM_DISPATCH_DRY_RUN=true`,
+`INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=true` e
+`INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED=false`. Em produção, o piloto autorizado
+em 24/11/2026 usa `INSTAGRAM_DISPATCH_DRY_RUN=false`, libera o tipo
+`private_reply` somente sob os gates comerciais/políticos e limita o canal a
+5 envios por conta em janela móvel de 24 horas. Toda ação exige aprovação humana.
 
 ## Corte de segurança de 29/10/2026
 
@@ -159,3 +161,23 @@ mudança de escopo exige fila reconciliada, rollback preparado e conferência de
   defesa adicional;
 - o rollback operacional é restaurar
   `INSTAGRAM_DISPATCH_DRY_RUN=true`; a trava de tipo deve permanecer ativa.
+
+## Ampliação controlada para Direct — 24/11/2026
+
+- fila conferida antes da mudança: zero `approved`, zero `dispatching` e zero
+  Direct elegível pendente;
+- `INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=false`,
+  `INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED=true` e
+  `INSTAGRAM_PRIVATE_REPLY_DAILY_LIMIT=5` em produção;
+- apenas `realtime/comment` com interesse comercial explícito, score >= 70,
+  potencial médio/alto e sem necessidade de mais sinal pode gerar proposta;
+- `n8n-check-instagram-policy`, painel, Edge Function de dispatch e RPC do banco
+  revalidam a elegibilidade; o limite de 24 horas é atômico no banco;
+- ao atingir o limite, a ação volta a `proposed`, sai da fila de envio e exige
+  uma nova aprovação humana; assim ela não bloqueia respostas públicas;
+- histórico nunca gera Direct; texto com link, acima de 500 caracteres ou de
+  1.000 bytes é rejeitado;
+- ativar o piloto não aprova nem envia ações. O primeiro envio depende de
+  revisão humana individual;
+- respostas recebidas devem ser acompanhadas no Meta Inbox até a ingestão do
+  webhook `messages` ser implementada e homologada.

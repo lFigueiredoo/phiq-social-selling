@@ -5,6 +5,7 @@ import {
   RESPONSE_DRAFT_PROMPT_VERSION,
   validateResponseDraftOutput,
 } from "../_shared/responseDraft.ts";
+import { checkOutboundPolicy } from "../_shared/outboundPolicy.ts";
 
 function adminKey(): string {
   const modern = Deno.env.get("SUPABASE_SECRET_KEYS");
@@ -91,5 +92,17 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: "job_not_claimed_by_worker" }, 409);
   }
 
-  return json({ ok: true, draft: data[0] });
+  let policy: Record<string, unknown> | null = null;
+  if (
+    data[0].action_type === "private_reply" &&
+    data[0].outbound_status === "proposed"
+  ) {
+    const checked = await checkOutboundPolicy(url, expected, data[0].outbound_action_id);
+    if (!checked.ok) {
+      return json({ ok: false, error: checked.error ?? "policy_check_failed" }, 502);
+    }
+    policy = checked.policy ?? null;
+  }
+
+  return json({ ok: true, draft: data[0], policy });
 });

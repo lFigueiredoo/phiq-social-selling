@@ -74,12 +74,15 @@ Quando recebe `classification_required`, o workflow usa
 onde schema, evidência, confiança e score são validados antes da fase C.
 
 Para comentários classificados, `n8n-prepare-instagram-draft` monta o prompt
-`SOCIAL_REPLY_DRAFT_V1` no backend. `models/gemini-3.6-flash` gera um JSON
+`SOCIAL_REPLY_DRAFT_V2` no backend. `models/gemini-3.6-flash` gera um JSON
 estrito com o texto, sentimento e resumo. `n8n-save-instagram-draft` revalida a saída e chama
-`save_instagram_response_draft`, que fixa o canal como resposta pública e grava
-uma única ação `proposed`. Comentários históricos preservam a origem
-`historical_backfill` e nunca geram Direct nesse fluxo. Falha no rascunho falha
-o job com backoff; reexecução é idempotente e não duplica a ação.
+`save_instagram_response_draft`, que escolhe o canal no backend e grava uma
+única ação `proposed`. `private_reply` exige comentário em tempo real,
+intenção comercial explícita, potencial médio/alto, score >= 70 e sinal
+suficiente; o worker consulta a política da Meta antes de concluir o job.
+Comentários históricos preservam a origem `historical_backfill` e nunca geram
+Direct. Falha no rascunho ou na política falha o job com backoff; reexecução é
+idempotente e não duplica a ação.
 
 Os dois nós Gemini têm três tentativas com intervalo de um segundo. Os nós de
 decodificação aceitam respostas JSON diretas, strings, `Buffer`, streams e

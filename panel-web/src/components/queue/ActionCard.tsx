@@ -24,7 +24,8 @@ import { useUpdateActionMessage } from "@/hooks/useUpdateActionMessage";
 import { cn } from "@/lib/utils";
 import type { PanelAction } from "@/lib/api/types";
 
-const MAX_MESSAGE_LENGTH = 2000;
+const MAX_MESSAGE_LENGTH = 1000;
+const MAX_MESSAGE_BYTES = 1000;
 
 const INTENT_LABEL: Record<string, string> = {
   engagement: "Engajamento",
@@ -97,10 +98,12 @@ export function ActionCard({ action, organizationId }: ActionCardProps) {
 
   const { data: membershipData } = useMemberships();
   const isPrivate = action.action_type === "private_reply";
-  const publicReplyOnly = membershipData?.dispatch?.public_reply_only !== false;
+  const messageCharacterLimit = isPrivate ? 500 : MAX_MESSAGE_LENGTH;
+  const actionTypeEnabled = membershipData?.dispatch?.allowed_action_types
+    ?.includes(action.action_type) === true;
   const automaticDispatchEnabled =
     membershipData?.dispatch?.automatic_dispatch_enabled === true &&
-    (!publicReplyOnly || !isPrivate);
+    actionTypeEnabled;
 
   const approveAction = useApproveAction(organizationId, automaticDispatchEnabled);
   const rejectAction = useRejectAction(organizationId);
@@ -108,6 +111,10 @@ export function ActionCard({ action, organizationId }: ActionCardProps) {
 
   const isBusy = approveAction.isPending || rejectAction.isPending || updateMessage.isPending;
   const hasMessageChanged = messageDraft.trim() !== action.message_text;
+  const messageBytes = new TextEncoder().encode(messageDraft.trim()).length;
+  const unsafePrivateMessage = isPrivate && /https?:\/\/|www\.|```/i.test(messageDraft);
+  const messageTooLarge = messageDraft.trim().length > messageCharacterLimit ||
+    messageBytes > MAX_MESSAGE_BYTES;
 
   return (
     <Card
@@ -217,20 +224,20 @@ export function ActionCard({ action, organizationId }: ActionCardProps) {
           <Textarea
             id={`message-${action.outbound_action_id}`}
             value={messageDraft}
-            maxLength={MAX_MESSAGE_LENGTH}
+            maxLength={messageCharacterLimit}
             disabled={isBusy}
             className="min-h-28 resize-y bg-background text-sm leading-6 shadow-xs"
             onChange={(event) => setMessageDraft(event.target.value)}
           />
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">
-              {messageDraft.length}/{MAX_MESSAGE_LENGTH} caracteres
+              {messageDraft.length}/{messageCharacterLimit} caracteres · {messageBytes}/{MAX_MESSAGE_BYTES} bytes
             </span>
             {hasMessageChanged && (
               <Button
                 size="sm"
                 variant="outline"
-                disabled={isBusy || messageDraft.trim().length === 0}
+                disabled={isBusy || messageDraft.trim().length === 0 || messageTooLarge || unsafePrivateMessage}
                 onClick={() =>
                   updateMessage.mutate({
                     outboundActionId: action.outbound_action_id,
@@ -257,7 +264,7 @@ export function ActionCard({ action, organizationId }: ActionCardProps) {
           </Button>
           <Button
             className="shadow-sm"
-            disabled={isBusy || hasMessageChanged}
+            disabled={isBusy || hasMessageChanged || messageTooLarge || unsafePrivateMessage || !actionTypeEnabled}
             onClick={() => setApprovalDialogOpen(true)}
           >
             <Check className="size-3.5" />
@@ -267,6 +274,16 @@ export function ActionCard({ action, organizationId }: ActionCardProps) {
         {hasMessageChanged && (
           <p className="text-right text-xs font-medium text-amber-700 dark:text-amber-300">
             Salve a edição antes de liberar esta resposta.
+          </p>
+        )}
+        {messageTooLarge && (
+          <p className="text-right text-xs font-medium text-destructive">
+            Reduza a mensagem para no máximo {MAX_MESSAGE_BYTES} bytes antes de liberar.
+          </p>
+        )}
+        {unsafePrivateMessage && (
+          <p className="text-right text-xs font-medium text-destructive">
+            O piloto de Direct não permite links na mensagem inicial.
           </p>
         )}
       </CardContent>
@@ -286,7 +303,9 @@ export function ActionCard({ action, organizationId }: ActionCardProps) {
                     : <ShieldCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" />}
                   <span>
                     {automaticDispatchEnabled
-                      ? "Ao confirmar, o dispatcher poderá enviar esta resposta automaticamente em até 1 minuto."
+                      ? isPrivate
+                        ? "Ao confirmar, o dispatcher poderá enviar uma única resposta privada em até 1 minuto. Novas mensagens só podem seguir se a pessoa responder."
+                        : "Ao confirmar, o dispatcher poderá enviar esta resposta automaticamente em até 1 minuto."
                       : "O modo seguro está ativo: a decisão será registrada, mas o envio ao Instagram continuará bloqueado."}
                   </span>
                 </p>

@@ -10,6 +10,8 @@ export interface PanelDispatchStatus {
   mode: "dry_run" | "live";
   automatic_dispatch_enabled: boolean;
   public_reply_only: boolean;
+  private_reply_pilot_enabled: boolean;
+  private_reply_daily_limit: number;
   allowed_action_types: ActionType[];
 }
 

@@ -34,8 +34,16 @@ test('Instagram dispatch is fail-safe and blocks before claiming an action', () 
     'public-reply-only guard must execute before the database claim',
   );
   assert.match(queue, /Deno\.env\.get\("INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY"\) \?\? "true"/);
+  assert.match(source, /INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED/);
+  assert.match(source, /INSTAGRAM_PRIVATE_REPLY_DAILY_LIMIT/);
+  assert.match(source, /private_reply_pilot_constraints_failed/);
+  assert.match(source, /new TextEncoder\(\)[.]encode[\s\S]*1000/);
+  assert.match(source, /p_private_reply_daily_limit/);
+  assert.match(queue, /INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED/);
   assert.match(queue, /query = query\.eq\("action_type", "public_reply"\)/);
   assert.match(example, /^INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=true$/m);
+  assert.match(example, /^INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED=false$/m);
+  assert.match(example, /^INSTAGRAM_PRIVATE_REPLY_DAILY_LIMIT=5$/m);
 });
 
 test('panel exposes dispatch mode and requires an explicit automatic-dispatch acknowledgement', () => {
@@ -53,14 +61,20 @@ test('panel exposes dispatch mode and requires an explicit automatic-dispatch ac
   assert.match(panelMe, /INSTAGRAM_DISPATCH_DRY_RUN/);
   assert.match(panelMe, /automatic_dispatch_enabled/);
   assert.match(panelMe, /public_reply_only/);
+  assert.match(panelMe, /private_reply_pilot_enabled/);
+  assert.match(panelMe, /private_reply_daily_limit/);
   assert.match(panelMe, /allowed_action_types/);
   assert.match(approve, /acknowledge_automatic_dispatch[\s\S]*dispatch_acknowledgement_required/);
   assert.match(client, /acknowledge_automatic_dispatch: true/);
   assert.match(card, /Confirmar aprovação/);
-  assert.match(card, /disabled=\{isBusy \|\| hasMessageChanged\}/);
+  assert.match(card, /unsafePrivateMessage/);
+  assert.match(card, /messageCharacterLimit = isPrivate \? 500/);
+  assert.match(card, /disabled=\{isBusy \|\| hasMessageChanged \|\| messageTooLarge \|\| unsafePrivateMessage \|\| !actionTypeEnabled\}/);
   assert.match(card, /Aprovar e liberar envio/);
   assert.match(queue, /Envio automático ativo/);
   assert.match(queue, /Piloto ativo: respostas públicas/);
+  assert.match(queue, /Piloto ativo: público \+ Direct/);
+  assert.match(queue, /interesse comercial explícito/);
   assert.match(queue, /Direct permanece bloqueado/);
   assert.match(queue, /Modo seguro: envio bloqueado/);
 });

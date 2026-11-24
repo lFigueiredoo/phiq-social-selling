@@ -23,10 +23,11 @@
   valor com qualquer outro consumidor. O callback aceitou o challenge novo com
   HTTP `200` e rejeitou um token inválido com HTTP `403`. A autenticação dos
   eventos `POST` por `META_APP_SECRET` não foi alterada.
-- O piloto usa `INSTAGRAM_DISPATCH_DRY_RUN=false` junto de
-  `INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=true`: somente resposta pública aprovada
-  pode ser enviada. O primeiro envio controlado foi reconciliado com a Meta em
-  24/11/2026; Direct continua bloqueado.
+- O piloto usa `INSTAGRAM_DISPATCH_DRY_RUN=false`,
+  `INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=false`,
+  `INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED=true` e limite de 5 Directs por janela
+  móvel de 24 horas. Tanto resposta pública quanto Direct elegível exigem
+  aprovação humana. A ativação do Direct não enviou mensagem.
 
 A interface da Meta classifica o fluxo atual como antigo, mas o fluxo segue
 funcionando e a Meta não publicou uma data de desligamento. Por isso, a
@@ -39,6 +40,24 @@ Fontes oficiais:
 - [Changelog da plataforma Instagram](https://developers.facebook.com/docs/instagram/platform/instagram-api/changelog/)
 - [System users e geração de tokens](https://developers.facebook.com/docs/business-management-apis/system-users/install-apps-and-generate-tokens/)
 - [Depuração de access tokens](https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging/)
+- [Private Replies no Instagram](https://developers.facebook.com/documentation/instagram-platform/private-replies/)
+- [Messaging API com Instagram Login](https://developers.facebook.com/documentation/instagram-platform/instagram-api-with-instagram-login/messaging-api/)
+
+## Regras do piloto de Private Reply
+
+- somente comentário `realtime`, nunca importação histórica ou live;
+- intenção comercial explícita, potencial médio/alto, score mínimo 70 e
+  `needs_more_signal=false`;
+- uma mensagem por comentário, dentro da janela de sete dias da Meta;
+- texto sem URL, com até 500 caracteres e no máximo 1.000 bytes UTF-8;
+- política elegível, pelo menos dez minutos restantes e aprovação humana;
+- teto atômico de 5 envios por conta em janela móvel de 24 horas.
+
+A mensagem inicial usa o ID do comentário como destinatário. A Meta permite
+continuação somente depois que a pessoa responde, e dentro da janela de
+mensagens aplicável. Nesta fase, essas respostas devem ser tratadas no Meta
+Inbox: o webhook `messages` ainda não é ingerido pelo CRM e nenhum follow-up é
+automático.
 
 ## Arquitetura de coexistência
 

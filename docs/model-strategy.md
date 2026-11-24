@@ -14,7 +14,7 @@ reutiliza o Google Gemini já conectado ao n8n pela credencial criptografada
 | Classificação explícita | Regras em `socialClassifier.ts` | Não chama o Gemini quando a evidência atual já resolve a rota |
 | Classificação ambígua | Gemini conectado ao n8n | Recebe somente prompt/contexto limitados; saída JSON volta ao backend para validação |
 | Confiança e score finais | Backend determinístico | Confiança sem evidência fica limitada a `0.84`; score informado pelo modelo é descartado e recalculado |
-| Rascunho de resposta pública | Gemini conectado ao n8n | Prompt separado, saída estrita e persistência `proposed`; toda resposta exige aprovação humana |
+| Rascunho de resposta pública ou Private Reply elegível | Gemini conectado ao n8n | Prompt separado por canal, saída estrita e persistência `proposed`; toda resposta exige aprovação humana |
 | Casos sensíveis, reclamações e baixa confiança | Revisão humana | Nenhum modelo autoriza envio ou altera elegibilidade sozinho |
 | Auditoria do classificador | Avaliação versionada e anonimizada | Executada antes de trocar modelo, prompt, schema ou limiar |
 
@@ -41,16 +41,19 @@ segredo, token, service-role key ou permissão de outbound.
 ## Contrato do rascunho de resposta
 
 Depois que a classificação é concluída, o backend pode devolver um segundo
-prompt, `SOCIAL_REPLY_DRAFT_V1`. O contexto é limitado ao comentário, origem e
+prompt, `SOCIAL_REPLY_DRAFT_V2`. O contexto é limitado ao comentário, origem e
 classificação já validada. O Gemini devolve exatamente `message_text`,
 `sentiment` e `analysis_summary`; o backend valida o schema, normaliza o texto e
-rejeita links, campos extras e mensagens acima de 500 caracteres.
+rejeita links, campos extras, mensagens acima de 500 caracteres ou acima de
+1.000 bytes UTF-8.
 
-A versão inicial cria somente `public_reply`, inclusive para comentários
-históricos. Canal, alvo, tenant, idempotência e status não vêm do modelo. A RPC
-atômica grava a ação com `status=proposed` e `policy_check_status=not_required`.
-O job só é concluído depois da persistência, e nenhum componente novo chama a
-API da Meta. Aprovação e dispatcher continuam etapas independentes.
+O backend, não o modelo, escolhe o canal. `private_reply` é candidato apenas
+para `realtime/comment`, intenção comercial explícita, potencial médio/alto,
+score >= 70 e `needs_more_signal=false`. Qualquer histórico permanece
+`public_reply`. Canal, alvo, tenant, idempotência e status não vêm do modelo. A
+RPC atômica grava `status=proposed`; Private Reply passa pela política da Meta
+antes de poder ser aprovado. Aprovação e dispatcher continuam etapas
+independentes.
 
 ## Controles obrigatórios
 
@@ -66,11 +69,13 @@ API da Meta. Aprovação e dispatcher continuam etapas independentes.
 5. Limitar e anonimizar o contexto conforme finalidade e LGPD.
 6. Novos ambientes permanecem com `INSTAGRAM_DISPATCH_DRY_RUN=true`. O piloto
    de produção autorizado em 24/11/2026 usa `false` junto de
-   `INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=true`; Direct continua fail-closed.
+   `INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=false`,
+   `INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED=true` e limite 5/24h. Fora dessa
+   combinação explícita, Direct continua fail-closed.
 
 ## Separação de responsabilidades
 
 O n8n possui a credencial do Gemini e orquestra as chamadas de classificação e
 rascunho. O Supabase monta os dois contratos, valida as saídas, recalcula o
 score, define o canal e persiste o estado. O dispatcher de Instagram continua
-separado e bloqueado durante a homologação.
+separado e somente reclama ação aprovada depois de revalidar todos os gates.

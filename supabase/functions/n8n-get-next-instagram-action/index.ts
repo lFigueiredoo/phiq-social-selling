@@ -30,6 +30,12 @@ function publicReplyOnlyEnabled(): boolean {
   return configured !== "false";
 }
 
+function privateReplyPilotEnabled(): boolean {
+  return (Deno.env.get("INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED") ?? "false")
+    .trim()
+    .toLowerCase() === "true";
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return Response.json({ ok: false, error: "method_not_allowed" }, { status: 405 });
@@ -63,7 +69,7 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const nowIso = new Date().toISOString();
+  const safePrivateWindowIso = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
   let query = supabase
     .from("outbound_actions")
@@ -74,9 +80,9 @@ Deno.serve(async (req: Request) => {
         "and(action_type.eq.public_reply,policy_check_status.in.(not_required,eligible))",
     )
     .is("sent_at", null)
-    .or(`eligible_until.is.null,eligible_until.gt.${nowIso}`);
+    .or(`eligible_until.is.null,eligible_until.gt.${safePrivateWindowIso}`);
 
-  if (publicReplyOnlyEnabled()) {
+  if (publicReplyOnlyEnabled() || !privateReplyPilotEnabled()) {
     query = query.eq("action_type", "public_reply");
   }
 
@@ -103,7 +109,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle(),
     supabase
       .from("webhook_events")
-      .select("payload, external_object_id, received_at")
+      .select("event_type, payload, external_object_id, received_at")
       .eq("id", action.webhook_event_id)
       .maybeSingle(),
   ]);
@@ -111,6 +117,20 @@ Deno.serve(async (req: Request) => {
   if (analysisError || eventError) {
     console.error("queue context lookup failed", analysisError?.code ?? eventError?.code);
     return Response.json({ ok: false, error: "queue_context_error" }, { status: 500 });
+  }
+
+  if (action.action_type === "private_reply") {
+    const explicitCommercial = analysis &&
+      ["purchase_interest", "product_interest"].includes(analysis.intent) &&
+      ["medium", "high"].includes(analysis.commercial_potential) &&
+      Number(analysis.lead_score) >= 70 &&
+      !["negative", "mixed"].includes(analysis.sentiment) &&
+      analysis.requires_human_review !== true;
+    const realtimeComment = event?.event_type === "comments" &&
+      event?.payload?.source !== "historical_backfill";
+    if (!explicitCommercial || !realtimeComment) {
+      return Response.json({ ok: true, queue, action: null });
+    }
   }
 
   const commentText = event?.payload?.entry?.[0]?.changes?.[0]?.value?.text ?? null;

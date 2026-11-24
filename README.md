@@ -10,15 +10,15 @@ de saída sob política e aprovação.
 
 O ambiente local está executável e foi validado com:
 
-- 35 migrations-base aplicadas do zero em PostgreSQL 17 e 3 incrementais
+- 35 migrations-base aplicadas do zero em PostgreSQL 17 e 5 incrementais
   aplicadas e validadas no remoto;
 - 21 Edge Functions versionadas;
 - 10 contratos SQL/pgTAP, 2 testes de concorrência e 1 teste HTTP integrado;
-- 44 testes Node de contrato e 48 testes Python do coletor;
+- 45 testes Node de contrato e 48 testes Python do coletor;
 - build TypeScript/Vite, lint e `npm audit` de produção sem falhas;
 - frontend dividido por rota, sem o bundle monolítico anterior.
 
-O Supabase remoto foi alinhado às 38 migrations e às funções
+O Supabase remoto foi alinhado às 40 migrations e às funções
 versionadas, com backup anterior ao deploy e testes negativos de autenticação.
 O painel CRM foi publicado em
 [`phiq-social-selling-panel.vercel.app`](https://phiq-social-selling-panel.vercel.app/)
@@ -35,8 +35,10 @@ nenhum envio em 29/10/2026. Em 23/11/2026, o token Meta de
 O código e o banco agora suportam coexistência segura entre o Instagram Login
 atual e um futuro Unified Login, com tokens separados, aliases explícitos de ID
 e dead letter para webhook sem mapeamento. O modo ativo continua sendo
-`instagram_login` e o dispatcher permanece bloqueado em produção por
-`INSTAGRAM_DISPATCH_DRY_RUN=true`.
+`instagram_login`. O dispatcher opera em piloto assistido: resposta pública e
+Direct elegível exigem aprovação humana; Direct fica restrito a comentário novo
+em tempo real, interesse comercial explícito, score mínimo 70, janela da Meta e
+limite de 5 mensagens por 24 horas.
 Veja [`docs/meta-setup.md`](docs/meta-setup.md) e o último inventário completo em
 [`docs/audit-2026-11-23.md`](docs/audit-2026-11-23.md).
 
@@ -127,8 +129,9 @@ decisão arquitetural e revisão de risco.
   Git; os arquivos `*.example` nunca devem conter valores reais.
 - Funções `panel-*` usam JWT de usuário e validação de membership; funções de
   worker usam segredo backend-only; webhook da Meta valida assinatura.
-- O modo `INSTAGRAM_DISPATCH_DRY_RUN=true` deve permanecer ativo até o teste
-  controlado de produção.
+- Novos ambientes devem nascer com `INSTAGRAM_DISPATCH_DRY_RUN=true`,
+  `INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=true` e
+  `INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED=false`.
 - Antes do deploy, rotacione segredos reutilizados, confirme a versão da API no
   App Dashboard da Meta e faça backup do banco remoto.
 

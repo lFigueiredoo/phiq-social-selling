@@ -48,7 +48,12 @@ Deno.serve(async (req: Request) => {
     if (typeof raw !== "string") throw new HttpError(400, "invalid_message_text");
     const messageText = raw.trim();
     if (!messageText) throw new HttpError(400, "invalid_message_text");
-    if (messageText.length > 2000) throw new HttpError(400, "message_text_too_long");
+    if (
+      messageText.length > 1000 ||
+      new TextEncoder().encode(messageText).length > 1000
+    ) {
+      throw new HttpError(400, "message_text_too_long");
+    }
 
     const supabase = adminClient();
     const { userId } = await requireUser(req, supabase);

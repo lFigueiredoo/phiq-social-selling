@@ -44,6 +44,17 @@ function publicReplyOnlyEnabled(): boolean {
   return configured !== "false";
 }
 
+function privateReplyPilotEnabled(): boolean {
+  return (Deno.env.get("INSTAGRAM_PRIVATE_REPLY_PILOT_ENABLED") ?? "false")
+    .trim()
+    .toLowerCase() === "true";
+}
+
+function privateReplyDailyLimit(): number {
+  const value = Number(Deno.env.get("INSTAGRAM_PRIVATE_REPLY_DAILY_LIMIT") ?? "5");
+  return Number.isInteger(value) && value >= 1 && value <= 20 ? value : 0;
+}
+
 const MAX_PUBLIC_REPLY_AUTHOR_LOOKUPS = 20;
 const PUBLIC_REPLY_AUTHOR_CONCURRENCY = 5;
 
@@ -220,30 +231,71 @@ Deno.serve(async (req: Request) => {
 
   const supabase = createClient(supabaseUrl, getAdminKey(), { auth: { persistSession: false, autoRefreshToken: false } });
 
-  // O piloto de produção libera somente respostas públicas. A trava consulta
-  // o tipo canônico no banco antes do claim e antes de qualquer chamada à Meta.
-  // Assim, um payload forjado ou uma aprovação privada legada não amplia o
-  // escopo autorizado pelo operador.
-  if (publicReplyOnlyEnabled()) {
-    const { data: queuedAction, error: queuedActionError } = await supabase
-      .from("outbound_actions")
-      .select("action_type")
-      .eq("id", actionId)
-      .maybeSingle();
+  // O tipo é sempre lido do banco antes do claim. Private Reply exige duas
+  // liberações independentes, critérios comerciais e origem realtime.
+  const { data: queuedAction, error: queuedActionError } = await supabase
+    .from("outbound_actions")
+    .select("action_type,analysis_id,webhook_event_id,message_text,policy_check_status,eligible_until")
+    .eq("id", actionId)
+    .maybeSingle();
 
-    if (queuedActionError) {
-      console.error("outbound action scope lookup failed", queuedActionError.code);
-      return Response.json({ ok: false, error: "dispatch_scope_lookup_failed" }, { status: 503 });
+  if (queuedActionError) {
+    console.error("outbound action scope lookup failed", queuedActionError.code);
+    return Response.json({ ok: false, error: "dispatch_scope_lookup_failed" }, { status: 503 });
+  }
+  if (!queuedAction) {
+    return Response.json({ ok: false, error: "action_not_found" }, { status: 404 });
+  }
+
+  if (
+    queuedAction.action_type === "private_reply" &&
+    (publicReplyOnlyEnabled() || !privateReplyPilotEnabled())
+  ) {
+    return Response.json(
+      { ok: false, error: "dispatch_action_type_not_enabled" },
+      { status: 423 },
+    );
+  }
+
+  const dailyLimit = privateReplyDailyLimit();
+  if (queuedAction.action_type === "private_reply") {
+    if (dailyLimit === 0) {
+      return Response.json({ ok: false, error: "private_reply_limit_misconfigured" }, { status: 503 });
+    }
+    if (new TextEncoder().encode(queuedAction.message_text ?? "").length > 1000) {
+      return Response.json({ ok: false, error: "private_reply_message_too_large" }, { status: 422 });
     }
 
-    if (!queuedAction) {
-      return Response.json({ ok: false, error: "action_not_found" }, { status: 404 });
-    }
+    const [{ data: analysis, error: analysisError }, { data: event, error: eventError }] =
+      await Promise.all([
+        supabase
+          .from("comment_analyses")
+          .select("intent,commercial_potential,lead_score,sentiment,requires_human_review")
+          .eq("id", queuedAction.analysis_id)
+          .maybeSingle(),
+        supabase
+          .from("webhook_events")
+          .select("event_type,payload")
+          .eq("id", queuedAction.webhook_event_id)
+          .maybeSingle(),
+      ]);
 
-    if (queuedAction.action_type !== "public_reply") {
+    const explicitCommercial = analysis &&
+      ["purchase_interest", "product_interest"].includes(analysis.intent) &&
+      ["medium", "high"].includes(analysis.commercial_potential) &&
+      Number(analysis.lead_score) >= 70 &&
+      !["negative", "mixed"].includes(analysis.sentiment) &&
+      analysis.requires_human_review !== true;
+    const realtimeComment = event?.event_type === "comments" &&
+      event?.payload?.source !== "historical_backfill";
+    const safeWindow = queuedAction.policy_check_status === "eligible" &&
+      queuedAction.eligible_until &&
+      Date.parse(queuedAction.eligible_until) > Date.now() + 10 * 60 * 1000;
+
+    if (analysisError || eventError || !explicitCommercial || !realtimeComment || !safeWindow) {
       return Response.json(
-        { ok: false, error: "dispatch_action_type_not_enabled" },
-        { status: 423 },
+        { ok: false, error: "private_reply_pilot_constraints_failed" },
+        { status: 422 },
       );
     }
   }
@@ -261,6 +313,7 @@ Deno.serve(async (req: Request) => {
   const { data: claimData, error: claimError } = await supabase.rpc("claim_outbound_action_for_dispatch", {
     p_action_id: actionId,
     p_dispatcher: dispatcherId,
+    p_private_reply_daily_limit: dailyLimit || 5,
   });
 
   if (claimError) {

@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildResponseDraftRequest } from "../_shared/responseDraft.ts";
+import { checkOutboundPolicy } from "../_shared/outboundPolicy.ts";
 
 function adminKey(): string {
   const modern = Deno.env.get("SUPABASE_SECRET_KEYS");
@@ -87,12 +88,28 @@ Deno.serve(async (req: Request) => {
 
   const { data: existing, error: existingError } = await db
     .from("outbound_actions")
-    .select("id,status")
+    .select("id,status,action_type,policy_check_status")
     .eq("processing_job_id", job.id)
     .limit(1)
     .maybeSingle();
   if (existingError) return json({ ok: false, error: "persistence_error" }, 500);
   if (existing) {
+    if (
+      existing.action_type === "private_reply" &&
+      existing.status === "proposed" &&
+      existing.policy_check_status === "not_checked"
+    ) {
+      const policy = await checkOutboundPolicy(url, expected, existing.id);
+      if (!policy.ok) {
+        return json({ ok: false, error: policy.error ?? "policy_check_failed" }, 502);
+      }
+      return json({
+        ok: true,
+        draft_required: false,
+        reason: "draft_policy_reconciled",
+        policy: policy.policy ?? null,
+      });
+    }
     return json({ ok: true, draft_required: false, reason: "draft_already_exists" });
   }
 
@@ -142,6 +159,7 @@ Deno.serve(async (req: Request) => {
     draft_request: buildResponseDraftRequest({
       commentText: text,
       source,
+      eventType: event.event_type,
       classification: classified.classification,
     }),
   });
