@@ -148,6 +148,9 @@ mudança de escopo exige fila reconciliada, rollback preparado e conferência de
   enviadas e que Direct continua bloqueado;
 - `N8N_WORKER_SECRET` foi rotacionado, separado de `META_VERIFY_TOKEN` e validado
   no worker e no dispatcher após a atualização do credential store;
+- `META_VERIFY_TOKEN` também foi rotacionado separadamente; o endpoint aceitou
+  o challenge novo com `200` e rejeitou um token inválido com `403`, sem mudar a
+  assinatura HMAC dos eventos (`META_APP_SECRET`);
 - o primeiro envio controlado concluiu como `sent` às 11:08:14 de 24/11/2026,
   com `provider_action_id=18080442827741679`; os polls seguintes não repetiram
   o envio;

@@ -15,8 +15,14 @@
   documentação ou painel.
 - O painel leu publicações e contagens reais após a renovação.
 - O webhook está ativado no app atual.
-- O dispatcher permanece bloqueado por
-  `INSTAGRAM_DISPATCH_DRY_RUN=true`; a validação não enviou comentário nem DM.
+- Em 24/11/2026, `META_VERIFY_TOKEN` foi rotacionado e deixou de compartilhar
+  valor com qualquer outro consumidor. O callback aceitou o challenge novo com
+  HTTP `200` e rejeitou um token inválido com HTTP `403`. A autenticação dos
+  eventos `POST` por `META_APP_SECRET` não foi alterada.
+- O piloto usa `INSTAGRAM_DISPATCH_DRY_RUN=false` junto de
+  `INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=true`: somente resposta pública aprovada
+  pode ser enviada. O primeiro envio controlado foi reconciliado com a Meta em
+  24/11/2026; Direct continua bloqueado.
 
 A interface da Meta classifica o fluxo atual como antigo, mas o fluxo segue
 funcionando e a Meta não publicou uma data de desligamento. Por isso, a
@@ -119,6 +125,8 @@ autoriza responder comentários nem iniciar Direct.
 ## Rotação e monitoramento
 
 - Tokens e app secrets ficam somente no secret store do Supabase/Meta.
+- `META_VERIFY_TOKEN`, `META_ACCESS_TOKEN` e `N8N_WORKER_SECRET` devem manter
+  valores e ciclos de rotação independentes.
 - Preferir token de system user com expiração e rotação planejada; registrar
   apenas o metadado de expiração.
 - Alertar para `401/403` da Meta, crescimento de `dead_letter`, ausência de
