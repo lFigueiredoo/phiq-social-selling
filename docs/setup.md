@@ -105,6 +105,9 @@ O coletor experimental possui uma suíte isolada:
 - workflow n8n configurado com `PHIQ Supabase Worker`, publicado com 19 nós e
   um único agendamento; o smoke de claim sem item na fila concluiu com sucesso
   em 9,64 s;
+- dispatcher versionado em
+  `n8n/workflows/ig-social-selling-dispatch-approved.json`, sem segredo em
+  headers e com os dois nós HTTP ligados a `PHIQ Supabase Worker`;
 - classificação e rascunhos usam o Gemini conectado; um fixture positivo
   concluiu o job e persistiu uma única ação `proposed`, sem `sent_at` nem
   `provider_action_id`, mantendo a aprovação humana obrigatória.
@@ -143,5 +146,10 @@ mudança de escopo exige fila reconciliada, rollback preparado e conferência de
   valores de secrets;
 - o painel publicado informa que apenas respostas públicas aprovadas podem ser
   enviadas e que Direct continua bloqueado;
+- `N8N_WORKER_SECRET` foi rotacionado, separado de `META_VERIFY_TOKEN` e validado
+  no worker e no dispatcher após a atualização do credential store;
+- o primeiro envio controlado concluiu como `sent` às 11:08:14 de 24/11/2026,
+  com `provider_action_id=18080442827741679`; os polls seguintes não repetiram
+  o envio;
 - o rollback operacional é restaurar
   `INSTAGRAM_DISPATCH_DRY_RUN=true`; a trava de tipo deve permanecer ativa.

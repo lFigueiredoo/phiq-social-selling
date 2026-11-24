@@ -5,6 +5,41 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..');
 const workflowPath = path.join(root, 'n8n', 'workflows', 'ig-social-selling-orchestrator.json');
+const dispatcherWorkflowPath = path.join(
+  root,
+  'n8n',
+  'workflows',
+  'ig-social-selling-dispatch-approved.json',
+);
+
+test('versioned dispatcher uses the central credential and contains no secret', () => {
+  const raw = fs.readFileSync(dispatcherWorkflowPath, 'utf8');
+  const workflow = JSON.parse(raw);
+  const httpNodes = workflow.nodes.filter(
+    node => node.type === 'n8n-nodes-base.httpRequest',
+  );
+
+  assert.equal(workflow.name, 'IG Social Selling — Dispatch Approved');
+  assert.equal(workflow.active, true);
+  assert.equal(httpNodes.length, 2);
+  assert.equal(httpNodes.every(node =>
+    node.parameters.authentication === 'genericCredentialType' &&
+    node.parameters.genericAuthType === 'httpHeaderAuth' &&
+    node.credentials?.httpHeaderAuth?.name === 'PHIQ Supabase Worker'
+  ), true);
+  assert.equal(
+    workflow.connections['Schedule Trigger'].main[0][0].node,
+    'Get Approved Action',
+  );
+  assert.equal(workflow.connections['Get Approved Action'].main[0][0].node, 'If');
+  assert.equal(workflow.connections.If.main[0][0].node, 'Dispatch Action');
+  assert.match(raw, /n8n-get-next-instagram-action/);
+  assert.match(raw, /n8n-dispatch-instagram-action/);
+  assert.doesNotMatch(raw, /x-worker-secret/i);
+  assert.doesNotMatch(raw, /IGAA[A-Za-z0-9_-]+/);
+  assert.doesNotMatch(raw, /(?:sk-|re_)[A-Za-z0-9_-]{20,}/);
+  assert.doesNotMatch(raw, /SUPABASE_(?:SERVICE_ROLE|SECRET)_KEY/);
+});
 
 test('versioned n8n worker is importable, secret-free and fail-safe', () => {
   const raw = fs.readFileSync(workflowPath, 'utf8');
