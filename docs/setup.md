@@ -154,5 +154,8 @@ mudança de escopo exige fila reconciliada, rollback preparado e conferência de
 - o primeiro envio controlado concluiu como `sent` às 11:08:14 de 24/11/2026,
   com `provider_action_id=18080442827741679`; os polls seguintes não repetiram
   o envio;
+- respostas da própria conta que retornam pelo webhook são ignoradas antes da
+  fila; um trigger no banco cancela e audita qualquer ação autodirecionada como
+  defesa adicional;
 - o rollback operacional é restaurar
   `INSTAGRAM_DISPATCH_DRY_RUN=true`; a trava de tipo deve permanecer ativa.

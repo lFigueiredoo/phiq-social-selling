@@ -28,7 +28,7 @@ function query(table) {
   };
   function execute(one) {
     const rows = table === 'instagram_accounts'
-      ? [{ id: 'account-1', organization_id: 'org-1', external_id: 'ig-1' }]
+      ? [{ id: 'account-1', organization_id: 'org-1', external_id: 'ig-1', username: 'phiq.oficial' }]
       : table === 'instagram_account_identifiers'
         ? identifiers
         : [...(table === 'webhook_events' ? events : jobs).values()];
@@ -80,10 +80,15 @@ function reset() { events.clear(); jobs.clear(); identifiers.length = 0; nextId 
 function claim(handler, secret, worker = 'worker-a') {
   return handler(new Request('http://local', { method: 'POST', headers: secret ? { 'x-worker-secret': secret } : {}, body: JSON.stringify({ worker_id: worker }) }));
 }
-async function webhook(handler, commentId = 'comment-1', entryId = 'ig-1') {
+async function webhook(
+  handler,
+  commentId = 'comment-1',
+  entryId = 'ig-1',
+  from = { id: 'person-1', username: 'cliente.teste', name: 'Cliente Teste' },
+) {
   const body = JSON.stringify({ object: 'instagram', entry: [{ id: entryId, changes: [{
     field: 'comments', value: { id: commentId, text: 'Quero abrir uma franquia',
-      from: { id: 'person-1', username: 'cliente.teste', name: 'Cliente Teste' },
+      from,
       media: { id: 'media-1', media_product_type: 'FEED' } },
   }] }] });
   const key = await webcrypto.subtle.importKey('raw', new TextEncoder().encode('meta-test'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -134,6 +139,56 @@ test('signed realtime webhook queues once and two workers cannot claim the same 
     metadata: { media_product_type: 'FEED' },
   });
   assert.equal(second.job, null);
+});
+
+test('signed self-authored comments are acknowledged without events, jobs or drafts', async () => {
+  reset();
+  const ingress = loadHandler('meta-instagram-webhook', {
+    META_APP_SECRET: 'meta-test',
+    SUPABASE_URL: 'http://local',
+    SUPABASE_SERVICE_ROLE_KEY: 'local-key',
+  });
+
+  const sameId = await webhook(
+    ingress,
+    'own-reply-1',
+    'ig-1',
+    { id: 'ig-1', username: 'phiq.oficial', name: 'PHIQ' },
+  );
+  assert.equal(sameId.status, 200);
+  assert.equal(events.size, 0);
+  assert.equal(jobs.size, 0);
+
+  const sameUsername = await webhook(
+    ingress,
+    'own-reply-2',
+    'ig-1',
+    { id: 'another-meta-namespace', username: 'PHIQ.OFICIAL', name: 'PHIQ' },
+  );
+  assert.equal(sameUsername.status, 200);
+  assert.equal(events.size, 0);
+  assert.equal(jobs.size, 0);
+});
+
+test('database guard cancels self-targeted outbound actions and audits the reason', () => {
+  const migration = fs.readFileSync(path.join(
+    root,
+    'supabase',
+    'migrations',
+    '20261124143000_prevent_self_authored_instagram_loops.sql',
+  ), 'utf8');
+  const auditFix = fs.readFileSync(path.join(
+    root,
+    'supabase',
+    'migrations',
+    '20261124160000_audit_all_self_target_cancellations.sql',
+  ), 'utf8');
+  assert.match(migration, /before insert or update of[\s\S]*target_user_id[\s\S]*target_username/i);
+  assert.match(migration, /new[.]status := 'cancelled'/i);
+  assert.match(migration, /self_authored_comment_ignored/i);
+  assert.match(migration, /outbound_action[.]cancelled_self_target/i);
+  assert.match(migration, /self-authored-webhook-guard/i);
+  assert.match(auditFix, /after insert or update\s+on public[.]outbound_actions/i);
 });
 
 test('webhook resolves a Unified Login entry alias to the canonical account', async () => {

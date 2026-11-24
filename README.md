@@ -6,18 +6,19 @@ recebe webhooks assinados, persiste eventos idempotentes, classifica o contexto
 com regras determinísticas/IA, conduz o lead pelos funis e mantém qualquer ação
 de saída sob política e aprovação.
 
-## Estado validado em 23/11/2026
+## Estado validado em 23–24/11/2026
 
 O ambiente local está executável e foi validado com:
 
-- 35 migrations aplicadas do zero em PostgreSQL 17;
+- 35 migrations-base aplicadas do zero em PostgreSQL 17 e 3 incrementais
+  aplicadas e validadas no remoto;
 - 21 Edge Functions versionadas;
 - 10 contratos SQL/pgTAP, 2 testes de concorrência e 1 teste HTTP integrado;
-- 40 testes Node de contrato e 48 testes Python do coletor;
+- 44 testes Node de contrato e 48 testes Python do coletor;
 - build TypeScript/Vite, lint e `npm audit` de produção sem falhas;
 - frontend dividido por rota, sem o bundle monolítico anterior.
 
-O Supabase remoto foi alinhado às 35 migrations e às funções
+O Supabase remoto foi alinhado às 38 migrations e às funções
 versionadas, com backup anterior ao deploy e testes negativos de autenticação.
 O painel CRM foi publicado em
 [`phiq-social-selling-panel.vercel.app`](https://phiq-social-selling-panel.vercel.app/)

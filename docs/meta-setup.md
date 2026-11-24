@@ -15,6 +15,10 @@
   documentação ou painel.
 - O painel leu publicações e contagens reais após a renovação.
 - O webhook está ativado no app atual.
+- Comentários publicados pela própria conta retornam pelo webhook da Meta, mas
+  são reconhecidos por ID ou username e encerrados antes da criação de evento,
+  job ou rascunho. O banco mantém uma segunda trava para cancelar e auditar
+  qualquer ação autodirecionada.
 - Em 24/11/2026, `META_VERIFY_TOKEN` foi rotacionado e deixou de compartilhar
   valor com qualquer outro consumidor. O callback aceitou o challenge novo com
   HTTP `200` e rejeitou um token inválido com HTTP `403`. A autenticação dos
@@ -130,7 +134,8 @@ autoriza responder comentários nem iniciar Direct.
 - Preferir token de system user com expiração e rotação planejada; registrar
   apenas o metadado de expiração.
 - Alertar para `401/403` da Meta, crescimento de `dead_letter`, ausência de
-  webhooks e divergência de username.
+  webhooks, divergência de username e ocorrências
+  `outbound_action.cancelled_self_target`.
 - Um aumento de `instagram_account_mapping_missing` bloqueia o canário até que
   o namespace correto seja identificado.
 - Nunca registrar tokens completos em logs, screenshots ou tickets.

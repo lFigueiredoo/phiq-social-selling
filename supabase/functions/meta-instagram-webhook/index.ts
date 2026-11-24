@@ -75,7 +75,12 @@ async function resolveInstagramAccount(
   supabase: any,
   webhookEntryId: string,
 ): Promise<{
-  account: { id: string; organization_id: string; external_id: string } | null;
+  account: {
+    id: string;
+    organization_id: string;
+    external_id: string;
+    username: string | null;
+  } | null;
   error: string | null;
 }> {
   const { data: alias, error: aliasError } = await supabase
@@ -93,7 +98,7 @@ async function resolveInstagramAccount(
   if (alias?.instagram_account_id) {
     const { data: account, error: accountError } = await supabase
       .from("instagram_accounts")
-      .select("id, organization_id, external_id")
+      .select("id, organization_id, external_id, username")
       .eq("id", alias.instagram_account_id)
       .eq("organization_id", alias.organization_id)
       .maybeSingle();
@@ -109,7 +114,7 @@ async function resolveInstagramAccount(
   // continua sendo uma fonte válida para o fluxo Instagram Login.
   const { data: account, error: accountError } = await supabase
     .from("instagram_accounts")
-    .select("id, organization_id, external_id")
+    .select("id, organization_id, external_id, username")
     .eq("external_id", webhookEntryId)
     .maybeSingle();
 
@@ -118,6 +123,23 @@ async function resolveInstagramAccount(
   }
 
   return { account: account ?? null, error: null };
+}
+
+function isSelfAuthoredComment(
+  value: any,
+  webhookEntryId: string,
+  account: { external_id: string; username: string | null },
+): boolean {
+  const senderId = value?.from?.id != null ? String(value.from.id).trim() : "";
+  const senderUsername = typeof value?.from?.username === "string"
+    ? value.from.username.trim().toLowerCase()
+    : "";
+  const accountUsername = account.username?.trim().toLowerCase() ?? "";
+
+  return Boolean(
+    (senderId && (senderId === webhookEntryId || senderId === account.external_id)) ||
+      (senderUsername && accountUsername && senderUsername === accountUsername),
+  );
 }
 
 Deno.serve(async (req: Request) => {
@@ -201,6 +223,15 @@ Deno.serve(async (req: Request) => {
       const commentId = change?.value?.id != null ? String(change.value.id) : null;
       if (!commentId) {
         console.warn("Ignoring comment webhook without comment id");
+        continue;
+      }
+
+      // Respostas públicas feitas pela própria conta também retornam pelo
+      // webhook de comentários. Elas são confirmações de saída, não novos
+      // leads. Ignorar antes da persistência impede rascunhos recursivos e
+      // continua retornando 200 para que a Meta não tente reenviar o evento.
+      if (account && isSelfAuthoredComment(change.value, igExternalId, account)) {
+        console.info("Ignoring self-authored Instagram comment", commentId);
         continue;
       }
 
