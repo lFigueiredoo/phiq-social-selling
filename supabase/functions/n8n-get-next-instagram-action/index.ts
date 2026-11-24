@@ -21,6 +21,15 @@ function constantTimeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
+function publicReplyOnlyEnabled(): boolean {
+  const configured = (
+    Deno.env.get("INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY") ?? "true"
+  )
+    .trim()
+    .toLowerCase();
+  return configured !== "false";
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return Response.json({ ok: false, error: "method_not_allowed" }, { status: 405 });
@@ -65,7 +74,13 @@ Deno.serve(async (req: Request) => {
         "and(action_type.eq.public_reply,policy_check_status.in.(not_required,eligible))",
     )
     .is("sent_at", null)
-    .or(`eligible_until.is.null,eligible_until.gt.${nowIso}`)
+    .or(`eligible_until.is.null,eligible_until.gt.${nowIso}`);
+
+  if (publicReplyOnlyEnabled()) {
+    query = query.eq("action_type", "public_reply");
+  }
+
+  query = query
     .order(queue === "approved" ? "approved_at" : "created_at", { ascending: true, nullsFirst: false })
     .limit(1);
 

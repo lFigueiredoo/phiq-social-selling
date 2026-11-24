@@ -96,8 +96,11 @@ export function ActionCard({ action, organizationId }: ActionCardProps) {
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
 
   const { data: membershipData } = useMemberships();
+  const isPrivate = action.action_type === "private_reply";
+  const publicReplyOnly = membershipData?.dispatch?.public_reply_only !== false;
   const automaticDispatchEnabled =
-    membershipData?.dispatch?.automatic_dispatch_enabled === true;
+    membershipData?.dispatch?.automatic_dispatch_enabled === true &&
+    (!publicReplyOnly || !isPrivate);
 
   const approveAction = useApproveAction(organizationId, automaticDispatchEnabled);
   const rejectAction = useRejectAction(organizationId);
@@ -105,7 +108,6 @@ export function ActionCard({ action, organizationId }: ActionCardProps) {
 
   const isBusy = approveAction.isPending || rejectAction.isPending || updateMessage.isPending;
   const hasMessageChanged = messageDraft.trim() !== action.message_text;
-  const isPrivate = action.action_type === "private_reply";
 
   return (
     <Card

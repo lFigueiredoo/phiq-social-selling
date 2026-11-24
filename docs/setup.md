@@ -109,10 +109,11 @@ O coletor experimental possui uma suíte isolada:
   concluiu o job e persistiu uma única ação `proposed`, sem `sent_at` nem
   `provider_action_id`, mantendo a aprovação humana obrigatória.
 
-A operação deve preservar `INSTAGRAM_DISPATCH_DRY_RUN=true`, usar segredos
-diferentes por finalidade e validar qualquer fixture Gemini sem outbound. A
-retirada do dry-run continua sendo uma mudança separada, com rollback e uma
-ação explicitamente autorizada.
+A configuração segura para novos ambientes continua sendo
+`INSTAGRAM_DISPATCH_DRY_RUN=true`. Em produção, o piloto autorizado em
+24/11/2026 usa `INSTAGRAM_DISPATCH_DRY_RUN=false` junto de
+`INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=true`: apenas respostas públicas
+aprovadas entram na fila do dispatcher, e Direct permanece bloqueado.
 
 ## Corte de segurança de 29/10/2026
 
@@ -127,6 +128,20 @@ ação explicitamente autorizada.
 - o dispatcher agendado pode continuar consultando a fila, mas recebe `423`
   enquanto o dry-run estiver ativo e não reclama nem envia a ação.
 
-Nunca altere o secret para `false` apenas para testar conectividade. A retirada
-do dry-run é uma mudança de produção separada, com uma única ação controlada,
-rollback preparado e conferência do registro `sent_at/provider_action_id`.
+Nunca altere o secret para `false` apenas para testar conectividade. Toda
+mudança de escopo exige fila reconciliada, rollback preparado e conferência de
+`sent_at/provider_action_id`.
+
+## Ativação controlada do piloto — 24/11/2026
+
+- a fila foi conferida imediatamente antes da ativação: zero ações `approved`;
+- `n8n-dispatch-instagram-action` bloqueia qualquer tipo diferente de
+  `public_reply` antes do claim e antes de chamar a Meta;
+- `n8n-get-next-instagram-action` filtra a fila para `public_reply` enquanto o
+  piloto estiver ativo;
+- `panel-me` expõe `public_reply_only` e `allowed_action_types` sem revelar
+  valores de secrets;
+- o painel publicado informa que apenas respostas públicas aprovadas podem ser
+  enviadas e que Direct continua bloqueado;
+- o rollback operacional é restaurar
+  `INSTAGRAM_DISPATCH_DRY_RUN=true`; a trava de tipo deve permanecer ativa.

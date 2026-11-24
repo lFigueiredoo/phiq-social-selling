@@ -64,7 +64,9 @@ API da Meta. Aprovação e dispatcher continuam etapas independentes.
    backoff do job continua separado e limitado a 15 minutos. Falha do provider
    reencaminha o job; nunca inventa rota nem conclui silenciosamente.
 5. Limitar e anonimizar o contexto conforme finalidade e LGPD.
-6. Manter `INSTAGRAM_DISPATCH_DRY_RUN=true` até smoke real e aprovação formal.
+6. Novos ambientes permanecem com `INSTAGRAM_DISPATCH_DRY_RUN=true`. O piloto
+   de produção autorizado em 24/11/2026 usa `false` junto de
+   `INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY=true`; Direct continua fail-closed.
 
 ## Separação de responsabilidades
 

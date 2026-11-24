@@ -35,6 +35,15 @@ function dispatchDryRunEnabled(): boolean {
   return configured !== "false";
 }
 
+function publicReplyOnlyEnabled(): boolean {
+  const configured = (
+    Deno.env.get("INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY") ?? "true"
+  )
+    .trim()
+    .toLowerCase();
+  return configured !== "false";
+}
+
 const MAX_PUBLIC_REPLY_AUTHOR_LOOKUPS = 20;
 const PUBLIC_REPLY_AUTHOR_CONCURRENCY = 5;
 
@@ -209,6 +218,36 @@ Deno.serve(async (req: Request) => {
     return Response.json({ ok: false, error: "server_misconfigured" }, { status: 503 });
   }
 
+  const supabase = createClient(supabaseUrl, getAdminKey(), { auth: { persistSession: false, autoRefreshToken: false } });
+
+  // O piloto de produção libera somente respostas públicas. A trava consulta
+  // o tipo canônico no banco antes do claim e antes de qualquer chamada à Meta.
+  // Assim, um payload forjado ou uma aprovação privada legada não amplia o
+  // escopo autorizado pelo operador.
+  if (publicReplyOnlyEnabled()) {
+    const { data: queuedAction, error: queuedActionError } = await supabase
+      .from("outbound_actions")
+      .select("action_type")
+      .eq("id", actionId)
+      .maybeSingle();
+
+    if (queuedActionError) {
+      console.error("outbound action scope lookup failed", queuedActionError.code);
+      return Response.json({ ok: false, error: "dispatch_scope_lookup_failed" }, { status: 503 });
+    }
+
+    if (!queuedAction) {
+      return Response.json({ ok: false, error: "action_not_found" }, { status: 404 });
+    }
+
+    if (queuedAction.action_type !== "public_reply") {
+      return Response.json(
+        { ok: false, error: "dispatch_action_type_not_enabled" },
+        { status: 423 },
+      );
+    }
+  }
+
   let meta: MetaRuntime;
   try {
     meta = getMetaRuntime();
@@ -218,8 +257,6 @@ Deno.serve(async (req: Request) => {
       : "meta_configuration_error";
     return Response.json({ ok: false, error: code }, { status: 503 });
   }
-
-  const supabase = createClient(supabaseUrl, getAdminKey(), { auth: { persistSession: false, autoRefreshToken: false } });
 
   const { data: claimData, error: claimError } = await supabase.rpc("claim_outbound_action_for_dispatch", {
     p_action_id: actionId,

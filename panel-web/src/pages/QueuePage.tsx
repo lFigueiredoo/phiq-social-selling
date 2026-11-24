@@ -19,6 +19,7 @@ function ApprovalQueuePage({ source, historical = false }: ApprovalQueuePageProp
   const [filters, setFilters] = useState<PanelListActionsFilters>({ source });
   const automaticDispatchEnabled =
     membershipData?.dispatch?.automatic_dispatch_enabled === true;
+  const publicReplyOnly = membershipData?.dispatch?.public_reply_only !== false;
 
   if (!organizationId) return null;
 
@@ -64,11 +65,17 @@ function ApprovalQueuePage({ source, historical = false }: ApprovalQueuePageProp
               {automaticDispatchEnabled
                 ? <ShieldAlert className="size-3.5" />
                 : <ShieldCheck className="size-3.5" />}
-              {automaticDispatchEnabled ? "Envio automático ativo" : "Modo seguro: envio bloqueado"}
+              {automaticDispatchEnabled
+                ? publicReplyOnly
+                  ? "Piloto ativo: respostas públicas"
+                  : "Envio automático ativo"
+                : "Modo seguro: envio bloqueado"}
             </strong>
             <span className="mt-1 block">
               {automaticDispatchEnabled
-                ? "Aprovar libera o dispatcher, que pode tentar o envio automaticamente em até 1 minuto."
+                ? publicReplyOnly
+                  ? "Somente respostas públicas aprovadas podem ser enviadas. Direct permanece bloqueado."
+                  : "Aprovar libera o dispatcher, que pode tentar o envio automaticamente em até 1 minuto."
                 : "Aprovar registra a decisão, mas o dispatcher não pode chamar o Instagram."}
             </span>
           </div>

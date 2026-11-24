@@ -45,6 +45,10 @@ Deno.serve(async (req: Request) => {
       (Deno.env.get("INSTAGRAM_DISPATCH_DRY_RUN") ?? "true")
         .trim()
         .toLowerCase() !== "false";
+    const publicReplyOnly =
+      (Deno.env.get("INSTAGRAM_DISPATCH_PUBLIC_REPLY_ONLY") ?? "true")
+        .trim()
+        .toLowerCase() !== "false";
 
     return json(req, {
       ok: true,
@@ -53,6 +57,10 @@ Deno.serve(async (req: Request) => {
       dispatch: {
         mode: dispatchDryRun ? "dry_run" : "live",
         automatic_dispatch_enabled: !dispatchDryRun,
+        public_reply_only: publicReplyOnly,
+        allowed_action_types: publicReplyOnly
+          ? ["public_reply"]
+          : ["public_reply", "private_reply"],
       },
     });
   } catch (err) {

@@ -9,6 +9,8 @@ export interface PanelMembership {
 export interface PanelDispatchStatus {
   mode: "dry_run" | "live";
   automatic_dispatch_enabled: boolean;
+  public_reply_only: boolean;
+  allowed_action_types: ActionType[];
 }
 
 export type ActionType = "public_reply" | "private_reply";
